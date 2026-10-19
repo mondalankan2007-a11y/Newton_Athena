@@ -173,8 +173,6 @@ export default function App() {
             </button>
           </div>
         )}
-
-        <p className="footer-note">Commit 2 of 30 &mdash; Assessment UI &amp; Start Flow</p>
       </div>
     </div>
   );

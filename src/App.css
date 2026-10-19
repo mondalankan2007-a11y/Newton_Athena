@@ -249,13 +249,6 @@
   width: auto;
 }
 
-/* ── Footer ──────────────────────────────────────────────── */
-.footer-note {
-  font-size: 11px;
-  color: #334155;
-  text-align: center;
-}
-
 /* ── Responsive ──────────────────────────────────────────── */
 @media (max-width: 520px) {
   .card {
