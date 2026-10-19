@@ -1,0 +1,172 @@
+/* ============================================================
+   App.css — Homepage / landing card styles
+   Dark theme, clean and minimal.
+   ============================================================ */
+
+/* Full-screen centering wrapper */
+.app-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+  background-color: #0f1117;
+  /* Subtle radial glow behind the card */
+  background-image: radial-gradient(
+    ellipse at 50% 40%,
+    rgba(99, 102, 241, 0.08) 0%,
+    transparent 70%
+  );
+}
+
+/* Main card */
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background-color: #1a1d27;
+  border: 1px solid #2d3148;
+  border-radius: 16px;
+  padding: 48px 40px;
+  max-width: 480px;
+  width: 100%;
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(99, 102, 241, 0.06);
+  text-align: center;
+}
+
+/* Logo ring */
+.logo-ring {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 2px solid #6366f1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.logo-letter {
+  font-size: 32px;
+  font-weight: 700;
+  color: #818cf8;
+  letter-spacing: -1px;
+  line-height: 1;
+}
+
+/* App name */
+.app-name {
+  font-size: 28px;
+  font-weight: 700;
+  color: #f0f4ff;
+  letter-spacing: -0.5px;
+  margin-bottom: 6px;
+}
+
+/* Subtitle */
+.app-subtitle {
+  font-size: 14px;
+  font-weight: 500;
+  color: #818cf8;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin-bottom: 24px;
+}
+
+/* Divider */
+.divider {
+  width: 100%;
+  border: none;
+  border-top: 1px solid #2d3148;
+  margin-bottom: 24px;
+}
+
+/* Description */
+.app-description {
+  font-size: 15px;
+  color: #94a3b8;
+  line-height: 1.65;
+  margin-bottom: 28px;
+  max-width: 340px;
+}
+
+/* Status badge */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background-color: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  color: #10b981;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: 20px;
+  margin-bottom: 32px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #10b981;
+  /* Pulse animation */
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(0.85); }
+}
+
+/* Start Test button */
+.start-btn {
+  width: 100%;
+  padding: 14px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #ffffff;
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  letter-spacing: 0.3px;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    opacity 0.15s ease;
+  margin-bottom: 24px;
+}
+
+.start-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(99, 102, 241, 0.35);
+}
+
+.start-btn:active {
+  transform: translateY(0);
+  opacity: 0.9;
+  box-shadow: none;
+}
+
+/* Footer note */
+.footer-note {
+  font-size: 12px;
+  color: #475569;
+}
+
+/* ============================================================
+   Responsive adjustments
+   ============================================================ */
+@media (max-width: 520px) {
+  .card {
+    padding: 36px 24px;
+  }
+
+  .app-name {
+    font-size: 24px;
+  }
+}
