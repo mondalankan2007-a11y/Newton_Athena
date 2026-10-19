@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, session } = require('electron');
 const path = require('path');
 
 // Detect if running in development (Vite dev server) or production (built files)
@@ -32,6 +32,22 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // Explicitly handle media (camera) permission requests from renderer securely
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    if (permission === 'media') {
+      callback(true);
+      return;
+    }
+    callback(false);
+  });
+
+  session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
+    if (permission === 'media') {
+      return true;
+    }
+    return false;
+  });
+
   createWindow();
 
   // macOS: re-create window when dock icon is clicked and no windows are open
