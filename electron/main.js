@@ -10,7 +10,7 @@ function createWindow() {
     height: 800,
     minWidth: 800,
     minHeight: 600,
-    title: 'Newton Athena',
+    title: 'Heimdall is monitoring your test',
     backgroundColor: '#0f1117',
     webPreferences: {
       // Security: context isolation ON, Node integration OFF
