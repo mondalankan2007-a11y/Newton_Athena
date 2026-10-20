@@ -1,4 +1,4 @@
-const { app, BrowserWindow, session } = require('electron');
+const { app, BrowserWindow, session, desktopCapturer } = require('electron');
 const path = require('path');
 
 // Detect if running in development (Vite dev server) or production (built files)
@@ -32,9 +32,9 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  // Explicitly handle media (camera) permission requests from renderer securely
+  // Handle media and screen capture permission requests securely
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
-    if (permission === 'media') {
+    if (permission === 'media' || permission === 'display-capture') {
       callback(true);
       return;
     }
@@ -42,10 +42,28 @@ app.whenReady().then(() => {
   });
 
   session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
-    if (permission === 'media') {
+    if (permission === 'media' || permission === 'display-capture') {
       return true;
     }
     return false;
+  });
+
+  // Handle standard navigator.mediaDevices.getDisplayMedia() in Electron 33+
+  session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
+    if (desktopCapturer.isDisplayMediaSystemPickerAvailable && desktopCapturer.isDisplayMediaSystemPickerAvailable()) {
+      callback({ video: desktopCapturer.systemPickerVideoSource });
+      return;
+    }
+    desktopCapturer.getSources({ types: ['screen', 'window'] }).then((sources) => {
+      if (sources && sources.length > 0) {
+        callback({ video: sources[0] });
+      } else {
+        callback({});
+      }
+    }).catch((err) => {
+      console.warn('desktopCapturer error:', err);
+      callback({});
+    });
   });
 
   createWindow();
