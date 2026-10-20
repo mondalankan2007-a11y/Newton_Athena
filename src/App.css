@@ -574,6 +574,336 @@ body {
   color: #ffffff;
 }
 
+/* ── Progress Steps Bar (Requirement 10) ───────────────────────────── */
+.progress-steps-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #0d0f15;
+  border: 1px solid #1c212c;
+  border-radius: 10px;
+  padding: 10px 18px;
+  width: 100%;
+}
+
+.progress-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  opacity: 0.45;
+  transition: all 0.2s ease;
+}
+
+.progress-step.is-active {
+  opacity: 1;
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.progress-step.is-complete {
+  opacity: 0.85;
+  color: #10b981;
+}
+
+.progress-step.is-active.is-complete {
+  opacity: 1;
+  color: #10b981;
+}
+
+.progress-step-divider {
+  width: 28px;
+  height: 1px;
+  background: #252b38;
+}
+
+.step-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #1a1f2c;
+  border: 1px solid #2d3548;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+}
+
+.progress-step.is-active .step-num {
+  background: #10b981;
+  border-color: #34d399;
+  color: #ffffff;
+}
+
+.progress-step.is-complete .step-num {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: #10b981;
+  color: #10b981;
+}
+
+.step-label {
+  font-size: 12.5px;
+  letter-spacing: 0.2px;
+}
+
+/* ── Device Status Cards Grid (Requirements 2 & 3 & 9) ─────────────── */
+.device-cards-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 18px 0;
+}
+
+.device-status-card {
+  background: #0d0f15;
+  border: 1px solid #1c212c;
+  border-radius: 12px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  transition: all 0.2s ease;
+}
+
+.device-status-card.status--connected {
+  border-color: rgba(16, 185, 129, 0.35);
+  background: linear-gradient(180deg, rgba(16, 185, 129, 0.05) 0%, #0d0f15 100%);
+}
+
+.device-status-card.status--error,
+.device-status-card.status--disconnected {
+  border-color: rgba(239, 68, 68, 0.35);
+  background: linear-gradient(180deg, rgba(239, 68, 68, 0.05) 0%, #0d0f15 100%);
+}
+
+.device-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.device-card-icon-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.device-card-icon-title h4 {
+  font-size: 15px;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.mini-icon-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.status--error .mini-icon-circle,
+.status--disconnected .mini-icon-circle {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+
+.device-card-badge {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 6px;
+}
+
+.status--connected .device-card-badge {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.status--error .device-card-badge,
+.status--disconnected .device-card-badge {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.status--not-checked .device-card-badge {
+  color: #94a3b8;
+  background: rgba(100, 116, 139, 0.12);
+  border: 1px solid rgba(100, 116, 139, 0.25);
+}
+
+.device-card-detail {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.45;
+  min-height: 32px;
+}
+
+.btn-card-action {
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 7px;
+  background: #1a1f2c;
+  border: 1px solid #2d3548;
+  color: #e2e8f0;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  width: fit-content;
+}
+
+.btn-card-action:hover {
+  background: #252c3e;
+  border-color: #3b455d;
+  color: #ffffff;
+}
+
+/* ── Notices (Requirements 7 & 8) ──────────────────────────────────── */
+.notice {
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.notice--ok {
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  color: #6ee7b7;
+}
+
+.notice--warn {
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  color: #fcd34d;
+}
+
+/* ── Initial Screen Hero ───────────────────────────────────────────── */
+.initial-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 16px 8px 12px;
+}
+
+.initial-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: #f8fafc;
+  margin-bottom: 4px;
+}
+
+.initial-subtitle {
+  font-size: 13.5px;
+  color: #94a3b8;
+  margin-bottom: 22px;
+}
+
+.initial-details-box {
+  width: 100%;
+  max-width: 480px;
+  background: #0d0f15;
+  border: 1px solid #1c212c;
+  border-radius: 10px;
+  padding: 14px 20px;
+  margin-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.detail-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.detail-label {
+  color: #64748b;
+}
+
+.detail-value {
+  color: #f1f5f9;
+  font-weight: 600;
+}
+
+.btn--large {
+  padding: 12px 36px;
+  font-size: 14px;
+}
+
+/* ── Assessment Ready Hero (Requirements 15 & 16) ─────────────────── */
+.assessment-ready-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 24px 8px;
+  gap: 12px;
+}
+
+.assessment-ready-badge {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(16, 185, 129, 0.15);
+  border: 2px solid #10b981;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #10b981;
+  margin-bottom: 4px;
+}
+
+.monitoring-status-pills {
+  display: flex;
+  gap: 12px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.pill-badge {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 9999px;
+}
+
+.pill-green {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #10b981;
+}
+
+.btn-action-danger {
+  padding: 10px 24px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 10px rgba(239, 68, 68, 0.25);
+}
+
+.btn-action-danger:hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}
+
 /* ── Responsive ────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .heimdall-card {
@@ -589,4 +919,19 @@ body {
     width: 100%;
     height: 180px;
   }
+
+  .device-cards-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .progress-step-divider {
+    display: none;
+  }
+
+  .progress-steps-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
 }
+

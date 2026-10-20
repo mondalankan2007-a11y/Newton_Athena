@@ -49,21 +49,18 @@ app.whenReady().then(() => {
   });
 
   // Handle standard navigator.mediaDevices.getDisplayMedia() in Electron 33+
-  session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
-    if (desktopCapturer.isDisplayMediaSystemPickerAvailable && desktopCapturer.isDisplayMediaSystemPickerAvailable()) {
-      callback({ video: desktopCapturer.systemPickerVideoSource });
-      return;
-    }
-    desktopCapturer.getSources({ types: ['screen', 'window'] }).then((sources) => {
-      if (sources && sources.length > 0) {
-        callback({ video: sources[0] });
-      } else {
-        callback({});
+  session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
+    try {
+      const sources = await desktopCapturer.getSources({ types: ['screen', 'window'] });
+      if (!sources || sources.length === 0) {
+        callback({ video: null });
+        return;
       }
-    }).catch((err) => {
+      callback({ video: sources[0] });
+    } catch (err) {
       console.warn('desktopCapturer error:', err);
-      callback({});
-    });
+      callback({ video: null });
+    }
   });
 
   createWindow();

@@ -38,7 +38,7 @@ function HeimdallLogo() {
 
 function CameraIcon() {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M23 7l-7 5 7 5V7z" />
       <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
     </svg>
@@ -47,7 +47,7 @@ function CameraIcon() {
 
 function ScreenIcon() {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
       <line x1="8" y1="21" x2="16" y2="21" />
       <line x1="12" y1="17" x2="12" y2="21" />
@@ -65,61 +65,53 @@ function CheckIcon() {
   );
 }
 
-// ── Screen Preview Mockup Thumbnail ─────────────────────────────────────────
-function ScreenPreviewThumbnail() {
+// ── Progress Indicator (Requirement 10) ─────────────────────────────────────
+function ProgressIndicator({ activeStep, cameraStatus, screenStatus }) {
+  const isReady = cameraStatus === 'connected' && screenStatus === 'connected';
+
   return (
-    <div className="screen-preview-card">
-      <div className="mini-window">
-        <div className="mini-window-bar">
-          <span className="mini-win-dot dot-red" />
-          <span className="mini-win-dot dot-yellow" />
-          <span className="mini-win-dot dot-green" />
-          <span className="mini-win-title">Heimdall is monitoring your test</span>
-        </div>
-        <div className="mini-window-body">
-          <div className="mini-col-left">
-            <div className="mini-badge-row">
-              <span className="mini-green-dot" />
-              <span className="mini-badge-text" />
-            </div>
-            <div className="mini-line w-80" />
-            <div className="mini-line w-60" />
-            <div className="mini-line w-40" />
-          </div>
-          <div className="mini-col-right">
-            <div className="mini-cam-feed">
-              <div className="mini-person-silhouette" />
-            </div>
-          </div>
-        </div>
+    <div className="progress-steps-bar">
+      <div className={`progress-step ${activeStep === 1 ? 'is-active' : ''} ${cameraStatus === 'connected' ? 'is-complete' : ''}`}>
+        <span className="step-num">{cameraStatus === 'connected' ? '✓' : '1'}</span>
+        <span className="step-label">Step 1 — Camera</span>
+      </div>
+      <div className="progress-step-divider" />
+      <div className={`progress-step ${activeStep === 2 ? 'is-active' : ''} ${screenStatus === 'connected' ? 'is-complete' : ''}`}>
+        <span className="step-num">{screenStatus === 'connected' ? '✓' : '2'}</span>
+        <span className="step-label">Step 2 — Screen</span>
+      </div>
+      <div className="progress-step-divider" />
+      <div className={`progress-step ${activeStep === 3 ? 'is-active' : ''} ${isReady ? 'is-complete' : ''}`}>
+        <span className="step-num">{isReady ? '✓' : '3'}</span>
+        <span className="step-label">Step 3 — Ready</span>
       </div>
     </div>
   );
 }
 
-// ── Step 1: Camera Check Section ────────────────────────────────────────────
-function CameraCheckView({ onContinue }) {
-  const [cameraStatus, setCameraStatus] = useState('requesting');
+// ── Step Component: Camera Verification ─────────────────────────────────────
+function CameraCheckModal({ currentStream, onCameraVerified, onBack }) {
+  const [status, setStatus] = useState(currentStream ? 'connected' : 'requesting');
   const [errorMessage, setErrorMessage] = useState('');
   const [deviceName, setDeviceName] = useState('Using your Native MacBook camera.');
   const [retryKey, setRetryKey] = useState(0);
 
   const videoRef = useRef(null);
-  const streamRef = useRef(null);
-
-  function stopCamera() {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-  }
+  const localStreamRef = useRef(currentStream || null);
 
   useEffect(() => {
     let isCancelled = false;
 
     async function initCamera() {
-      stopCamera();
-      setCameraStatus('requesting');
+      // If we already have a stream passed in and didn't trigger retry, bind it
+      if (localStreamRef.current && retryKey === 0) {
+        if (videoRef.current) {
+          videoRef.current.srcObject = localStreamRef.current;
+        }
+        return;
+      }
+
+      setStatus('requesting');
       setErrorMessage('');
 
       try {
@@ -133,43 +125,30 @@ function CameraCheckView({ onContinue }) {
         });
 
         if (isCancelled) {
-          stream.getTracks().forEach((track) => track.stop());
+          stream.getTracks().forEach((t) => t.stop());
           return;
         }
 
-        streamRef.current = stream;
+        localStreamRef.current = stream;
 
         const videoTrack = stream.getVideoTracks()[0];
         if (videoTrack && videoTrack.label) {
           setDeviceName(`Using your ${videoTrack.label}.`);
-        } else {
-          setDeviceName('Using your Native MacBook camera.');
         }
 
-        setCameraStatus('connected');
+        setStatus('connected');
 
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          videoRef.current.play().catch((err) => {
-            console.warn('Video autoPlay prevented:', err);
-          });
+          videoRef.current.play().catch(() => {});
         }
       } catch (err) {
         if (isCancelled) return;
-        console.warn('Camera check error:', err);
-
+        setStatus('error');
         if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-          setCameraStatus('denied');
-          setErrorMessage('Camera access is required to continue with the monitored assessment.');
-        } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-          setCameraStatus('unavailable');
-          setErrorMessage('No camera device was detected on your system. Please connect a webcam.');
-        } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
-          setCameraStatus('unavailable');
-          setErrorMessage('Your camera is currently being used by another application.');
+          setErrorMessage('Camera access was denied. Please allow camera permissions.');
         } else {
-          setCameraStatus('unavailable');
-          setErrorMessage('Unable to access camera media stream. Please verify your permissions.');
+          setErrorMessage('Unable to access camera. Please verify device connection.');
         }
       }
     }
@@ -178,19 +157,19 @@ function CameraCheckView({ onContinue }) {
 
     return () => {
       isCancelled = true;
-      stopCamera();
     };
   }, [retryKey]);
 
   useEffect(() => {
-    if (cameraStatus === 'connected' && streamRef.current && videoRef.current) {
-      videoRef.current.srcObject = streamRef.current;
+    if (status === 'connected' && localStreamRef.current && videoRef.current) {
+      videoRef.current.srcObject = localStreamRef.current;
     }
-  }, [cameraStatus]);
+  }, [status]);
 
-  function handleContinueClick() {
-    stopCamera();
-    onContinue();
+  function handleConfirm() {
+    if (localStreamRef.current) {
+      onCameraVerified(localStreamRef.current, deviceName);
+    }
   }
 
   return (
@@ -199,42 +178,48 @@ function CameraCheckView({ onContinue }) {
         <HeimdallLogo />
       </div>
 
-      {/* Row 1: Turn on Your Camera */}
+      <div className="step-header">
+        <div>
+          <h2 className="step-title">Camera Check</h2>
+          <p className="step-desc">Verify your webcam is properly connected and functioning.</p>
+        </div>
+      </div>
+
+      <hr className="heimdall-divider" />
+
       <div className="device-row">
         <div className="device-info">
           <div className="device-icon-box">
             <CameraIcon />
           </div>
           <div className="device-text">
-            <h2 className="device-title">Turn on Your Camera</h2>
-            <p className="device-desc">Start your camera to proceed with the test.</p>
+            <h3 className="device-title">Webcam Verification</h3>
+            <p className="device-desc">Start your camera to proceed with the assessment.</p>
 
-            {cameraStatus === 'connected' && (
+            {status === 'connected' && (
               <div className="permission-status">
                 <div className="permission-badge">
                   <CheckIcon />
-                  <span>Permission Given</span>
+                  <span>Camera Connected</span>
                 </div>
                 <p className="device-subtext">{deviceName}</p>
               </div>
             )}
 
-            {cameraStatus === 'requesting' && (
+            {status === 'requesting' && (
               <div className="permission-status">
                 <div className="permission-requesting">
                   <div className="mini-spinner" />
-                  <span>Requesting camera permission...</span>
+                  <span>Requesting camera access...</span>
                 </div>
               </div>
             )}
 
-            {(cameraStatus === 'denied' || cameraStatus === 'unavailable') && (
+            {status === 'error' && (
               <div className="permission-status">
                 <div className="permission-error">
-                  <span className="error-dot">✖</span>
-                  <span>{cameraStatus === 'denied' ? 'Camera permission denied' : 'Camera unavailable'}</span>
+                  <span>✖ {errorMessage}</span>
                 </div>
-                <p className="device-subtext">{errorMessage}</p>
                 <button className="btn-retry" onClick={() => setRetryKey((k) => k + 1)}>
                   Try Again
                 </button>
@@ -244,20 +229,10 @@ function CameraCheckView({ onContinue }) {
         </div>
 
         <div className="preview-container">
-          {cameraStatus === 'connected' ? (
-            <video
-              ref={videoRef}
-              autoPlay
-              muted
-              playsInline
-              className="live-video-feed"
-            />
+          {status === 'connected' ? (
+            <video ref={videoRef} autoPlay muted playsInline className="live-video-feed" />
           ) : (
             <div className="preview-placeholder">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="1.5">
-                <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
-                <line x1="1" y1="1" x2="23" y2="23" />
-              </svg>
               <span>Camera preview unavailable</span>
             </div>
           )}
@@ -266,94 +241,39 @@ function CameraCheckView({ onContinue }) {
 
       <hr className="heimdall-divider" />
 
-      {/* Row 2: Screen Sharing preview row */}
-      <div className="device-row">
-        <div className="device-info">
-          <div className="device-icon-box">
-            <ScreenIcon />
-          </div>
-          <div className="device-text">
-            <h2 className="device-title">Share your Entire Screen</h2>
-            <p className="device-desc">Kindly do the screen share of your entire screen.</p>
-            <div className="permission-status">
-              <span className="permission-badge-pending">● Configured in next step</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="preview-container">
-          <ScreenPreviewThumbnail />
-        </div>
-      </div>
-
-      <hr className="heimdall-divider" />
-
-      {/* Privacy Policy */}
-      <div className="privacy-section">
-        <h3 className="privacy-title">Privacy Policy</h3>
-        <p className="privacy-text">
-          Proctor reports generated from screen share, camera recordings, and system activity during assessments are securely stored to uphold academic integrity, enable audits, dispute resolution, and meet compliance requirements, including those set by the UGC.
-        </p>
-        <p className="privacy-text">
-          Reports remain in active storage for up to 6 months and may be securely retained longer to meet academic, compliance, or legal obligations. Access is strictly restricted to authorized personnel.
-        </p>
-      </div>
-
-      <div className="card-actions-row">
+      <div className="btn-navigation-row">
+        <button id="camera-back-btn" className="btn-action-ghost" onClick={onBack}>
+          Back
+        </button>
         <button
-          id="continue-to-screen-btn"
+          id="confirm-camera-btn"
           className="btn-action-primary"
-          disabled={cameraStatus !== 'connected'}
-          onClick={handleContinueClick}
+          disabled={status !== 'connected'}
+          onClick={handleConfirm}
         >
-          Continue to Screen Sharing
+          Confirm Camera
         </button>
       </div>
     </div>
   );
 }
 
-// ── Step 2: Screen Sharing Check (Commit 5) ──────────────────────────────────
-function ScreenSharingCheckView({ onBack, onContinue }) {
-  // Requirement 2: React state managing:
-  // 'not-started' | 'waiting' | 'selected' | 'denied' | 'unavailable'
-  const [screenStatus, setScreenStatus] = useState('not-started');
+// ── Step Component: Screen Sharing Verification ─────────────────────────────
+function ScreenSharingModal({ currentStream, onScreenVerified, onBack }) {
+  const [status, setStatus] = useState(currentStream ? 'connected' : 'not-started');
   const [statusMessage, setStatusMessage] = useState('');
-  const [screenStream, setScreenStream] = useState(null);
 
   const screenVideoRef = useRef(null);
-  const streamRef = useRef(null);
+  const localStreamRef = useRef(currentStream || null);
 
-  // Requirement 11: Cleanup helper to stop all screen tracks
-  function stopScreenStream() {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-    setScreenStream(null);
-  }
-
-  // Requirement 11: Cleanup on component unmount
   useEffect(() => {
-    return () => {
-      stopScreenStream();
-    };
+    if (localStreamRef.current && screenVideoRef.current) {
+      screenVideoRef.current.srcObject = localStreamRef.current;
+    }
   }, []);
 
-  // Bind video element when screen stream becomes active
-  useEffect(() => {
-    if (screenStatus === 'selected' && screenStream && screenVideoRef.current) {
-      screenVideoRef.current.srcObject = screenStream;
-      screenVideoRef.current.play().catch((err) => {
-        console.warn('Screen video autoPlay error:', err);
-      });
-    }
-  }, [screenStatus, screenStream]);
-
-  // Requirement 3 & 10: Explicit user selection using standard getDisplayMedia
   async function handleShareScreen() {
-    stopScreenStream();
-    setScreenStatus('waiting');
+    setStatus('waiting');
     setStatusMessage('');
 
     try {
@@ -361,232 +281,36 @@ function ScreenSharingCheckView({ onBack, onContinue }) {
         throw new Error('DisplayMediaUnsupported');
       }
 
-      // Requirement 3: Request screen display media, video only
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: true,
         audio: false,
       });
 
-      streamRef.current = stream;
-      setScreenStream(stream);
-      setScreenStatus('selected');
+      localStreamRef.current = stream;
+      setStatus('connected');
       setStatusMessage('Screen sharing connected');
 
-      // Requirement 12: Detect manual stop via browser/OS controls
-      const videoTrack = stream.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.onended = () => {
-          stopScreenStream();
-          setScreenStatus('unavailable');
-          setStatusMessage('Screen sharing stopped');
-        };
+      if (screenVideoRef.current) {
+        screenVideoRef.current.srcObject = stream;
+        screenVideoRef.current.play().catch(() => {});
       }
     } catch (err) {
-      console.warn('getDisplayMedia result:', err.name || err.message);
-
-      // Requirement 8: User cancelled the screen-share dialog
       if (err.name === 'NotAllowedError' || err.name === 'AbortError') {
-        setScreenStatus('not-started');
+        setStatus('not-started');
         setStatusMessage('Screen sharing was not selected.');
-      } else if (err.name === 'SecurityError' || err.name === 'PermissionDeniedError') {
-        // Requirement 2: Permission Denied
-        setScreenStatus('denied');
-        setStatusMessage('Screen sharing permission was denied.');
       } else {
-        // Requirement 2 & 9: Screen Unavailable / Error
-        setScreenStatus('unavailable');
-        setStatusMessage('Unable to access screen sharing. Please check system permissions.');
+        setStatus('error');
+        setStatusMessage('Screen sharing permission was denied or unavailable.');
       }
     }
   }
 
-  function handleBackClick() {
-    stopScreenStream();
-    onBack();
-  }
-
-  function handleContinueClick() {
-    onContinue();
-  }
-
-  // Status labels for Requirement 2
-  function getStatusLabel(status) {
-    switch (status) {
-      case 'not-started':
-        return 'Not Started';
-      case 'waiting':
-        return 'Waiting for Permission';
-      case 'selected':
-        return 'Screen Selected';
-      case 'denied':
-        return 'Permission Denied';
-      case 'unavailable':
-        return 'Screen Unavailable';
-      default:
-        return 'Not Started';
+  function handleConfirm() {
+    if (localStreamRef.current) {
+      onScreenVerified(localStreamRef.current);
     }
   }
 
-  // Status indicator text for Requirement 5
-  function getIndicatorBadge(status) {
-    switch (status) {
-      case 'selected':
-        return (
-          <div className="status-indicator-badge badge-green">
-            <span className="indicator-bullet">●</span>
-            <span>Screen Selected</span>
-          </div>
-        );
-      case 'waiting':
-        return (
-          <div className="status-indicator-badge badge-yellow">
-            <span className="indicator-bullet">●</span>
-            <span>Waiting for Permission</span>
-          </div>
-        );
-      case 'denied':
-        return (
-          <div className="status-indicator-badge badge-red">
-            <span className="indicator-bullet">●</span>
-            <span>Permission Denied</span>
-          </div>
-        );
-      case 'unavailable':
-        return (
-          <div className="status-indicator-badge badge-red">
-            <span className="indicator-bullet">●</span>
-            <span>Screen Unavailable</span>
-          </div>
-        );
-      default:
-        return (
-          <div className="status-indicator-badge badge-gray">
-            <span className="indicator-bullet">●</span>
-            <span>Not Started</span>
-          </div>
-        );
-    }
-  }
-
-  return (
-    <div className="heimdall-card">
-      <div className="heimdall-header">
-        <HeimdallLogo />
-      </div>
-
-      {/* Requirement 1: Screen Sharing Check title & description */}
-      <div className="step-header">
-        <div className="step-header-text">
-          <h2 className="step-title">Screen Sharing Check</h2>
-          <p className="step-desc">
-            Screen sharing is required for this monitored assessment. You will be asked to select the screen or window you want to share.
-          </p>
-        </div>
-        {getIndicatorBadge(screenStatus)}
-      </div>
-
-      <hr className="heimdall-divider" />
-
-      {/* Requirement 2 & 4: Status row & preview card */}
-      <div className="device-row">
-        <div className="device-info">
-          <div className="device-icon-box">
-            <ScreenIcon />
-          </div>
-          <div className="device-text">
-            <h3 className="device-title">Screen: {getStatusLabel(screenStatus)}</h3>
-
-            {/* Requirement 4: Screen sharing connected */}
-            {screenStatus === 'selected' && (
-              <div className="permission-status">
-                <div className="permission-badge">
-                  <CheckIcon />
-                  <span>Screen sharing connected</span>
-                </div>
-                <p className="device-subtext">Live screen capture is active.</p>
-              </div>
-            )}
-
-            {screenStatus === 'waiting' && (
-              <div className="permission-status">
-                <div className="permission-requesting">
-                  <div className="mini-spinner" />
-                  <span>Waiting for permission... Please select a screen.</span>
-                </div>
-              </div>
-            )}
-
-            {statusMessage && screenStatus !== 'selected' && screenStatus !== 'waiting' && (
-              <div className="permission-status">
-                <div className="permission-notice-box">
-                  <span>{statusMessage}</span>
-                </div>
-              </div>
-            )}
-
-            {/* Requirement 3: Share Screen button */}
-            <div className="share-btn-wrap">
-              <button
-                id="share-screen-btn"
-                className="btn-share-screen"
-                onClick={handleShareScreen}
-                disabled={screenStatus === 'waiting'}
-              >
-                {screenStatus === 'selected' ? 'Change Screen' : 'Share Screen'}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Requirement 4: Video element inside simple preview card */}
-        <div className="preview-container preview-container--large">
-          {screenStatus === 'selected' && screenStream ? (
-            <video
-              ref={screenVideoRef}
-              autoPlay
-              muted
-              playsInline
-              className="screen-video-feed"
-            />
-          ) : (
-            <div className="preview-placeholder">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="1.5">
-                <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                <line x1="8" y1="21" x2="16" y2="21" />
-                <line x1="12" y1="17" x2="12" y2="21" />
-              </svg>
-              <span>Screen preview unavailable</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <hr className="heimdall-divider" />
-
-      {/* Requirement 6 & 7: Back and Continue buttons */}
-      <div className="btn-navigation-row">
-        <button
-          id="back-btn-screen"
-          className="btn-action-ghost"
-          onClick={handleBackClick}
-        >
-          Back
-        </button>
-        <button
-          id="continue-btn-screen"
-          className="btn-action-primary"
-          disabled={screenStatus !== 'selected' || !screenStream}
-          onClick={handleContinueClick}
-        >
-          Continue
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ── Step 3: Assessment Ready Confirmation ───────────────────────────────────
-function AssessmentReadyView({ onBack }) {
   return (
     <div className="heimdall-card">
       <div className="heimdall-header">
@@ -595,57 +319,417 @@ function AssessmentReadyView({ onBack }) {
 
       <div className="step-header">
         <div>
-          <h2 className="step-title">Assessment Monitoring Active</h2>
+          <h2 className="step-title">Screen Sharing Check</h2>
           <p className="step-desc">
-            All required monitoring permissions (camera & screen sharing) have been verified successfully.
+            Select the screen or window you want to share for the assessment.
           </p>
         </div>
       </div>
 
       <hr className="heimdall-divider" />
 
-      <div className="ready-checklist">
-        <div className="ready-item">
-          <CheckIcon />
-          <span>Camera Check Completed</span>
+      <div className="device-row">
+        <div className="device-info">
+          <div className="device-icon-box">
+            <ScreenIcon />
+          </div>
+          <div className="device-text">
+            <h3 className="device-title">Screen Capture</h3>
+            <p className="device-desc">You must explicitly select a screen or window.</p>
+
+            {status === 'connected' && (
+              <div className="permission-status">
+                <div className="permission-badge">
+                  <CheckIcon />
+                  <span>Screen Sharing Connected</span>
+                </div>
+              </div>
+            )}
+
+            {status === 'waiting' && (
+              <div className="permission-status">
+                <div className="permission-requesting">
+                  <div className="mini-spinner" />
+                  <span>Waiting for permission...</span>
+                </div>
+              </div>
+            )}
+
+            {statusMessage && status !== 'connected' && status !== 'waiting' && (
+              <div className="permission-status">
+                <div className="permission-notice-box">
+                  <span>{statusMessage}</span>
+                </div>
+              </div>
+            )}
+
+            <div className="share-btn-wrap">
+              <button
+                id="share-screen-btn"
+                className="btn-share-screen"
+                onClick={handleShareScreen}
+                disabled={status === 'waiting'}
+              >
+                {status === 'connected' ? 'Change Screen' : 'Share Screen'}
+              </button>
+            </div>
+          </div>
         </div>
-        <div className="ready-item">
-          <CheckIcon />
-          <span>Screen Sharing Check Completed</span>
+
+        <div className="preview-container preview-container--large">
+          {status === 'connected' && localStreamRef.current ? (
+            <video ref={screenVideoRef} autoPlay muted playsInline className="screen-video-feed" />
+          ) : (
+            <div className="preview-placeholder">
+              <span>Screen preview unavailable</span>
+            </div>
+          )}
         </div>
       </div>
 
       <hr className="heimdall-divider" />
 
       <div className="btn-navigation-row">
-        <button className="btn-action-ghost" onClick={onBack}>
-          Back to Screen Check
+        <button id="screen-back-btn" className="btn-action-ghost" onClick={onBack}>
+          Back
+        </button>
+        <button
+          id="confirm-screen-btn"
+          className="btn-action-primary"
+          disabled={status !== 'connected'}
+          onClick={handleConfirm}
+        >
+          Confirm Screen
         </button>
       </div>
     </div>
   );
 }
 
-// ── Root App Component ──────────────────────────────────────────────────────
+// ── Root Application ────────────────────────────────────────────────────────
 export default function App() {
-  // Flow: 'camera' → 'screen-check' → 'ready'
-  const [flow, setFlow] = useState('camera');
+  // Navigation flow: 'initial' | 'pre-test' | 'camera-check' | 'screen-check' | 'assessment-ready'
+  const [flow, setFlow] = useState('initial');
+
+  // Device check status states:
+  // 'not-checked' | 'connected' | 'error' | 'disconnected'
+  const [cameraStatus, setCameraStatus] = useState('not-checked');
+  const [screenStatus, setScreenStatus] = useState('not-checked');
+  const [cameraDeviceName, setCameraDeviceName] = useState('');
+
+  // Active MediaStreams
+  const [cameraStream, setCameraStream] = useState(null);
+  const [screenStream, setScreenStream] = useState(null);
+
+  const cameraStreamRef = useRef(null);
+  const screenStreamRef = useRef(null);
+
+  // Sync refs with states
+  useEffect(() => {
+    cameraStreamRef.current = cameraStream;
+  }, [cameraStream]);
+
+  useEffect(() => {
+    screenStreamRef.current = screenStream;
+  }, [screenStream]);
+
+  // Cleanup helper for all streams
+  function cleanupAllStreams() {
+    if (cameraStreamRef.current) {
+      cameraStreamRef.current.getTracks().forEach((track) => track.stop());
+      cameraStreamRef.current = null;
+    }
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach((track) => track.stop());
+      screenStreamRef.current = null;
+    }
+    setCameraStream(null);
+    setScreenStream(null);
+  }
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      cleanupAllStreams();
+    };
+  }, []);
+
+  // Set up unexpected disconnect listeners (Requirements 12 & 13)
+  function attachCameraDisconnectListener(stream) {
+    const track = stream.getVideoTracks()[0];
+    if (track) {
+      track.onended = () => {
+        setCameraStatus('disconnected');
+        setCameraStream(null);
+        cameraStreamRef.current = null;
+      };
+    }
+  }
+
+  function attachScreenDisconnectListener(stream) {
+    const track = stream.getVideoTracks()[0];
+    if (track) {
+      track.onended = () => {
+        setScreenStatus('disconnected');
+        setScreenStream(null);
+        screenStreamRef.current = null;
+      };
+    }
+  }
+
+  // Handlers for verifying camera
+  function handleCameraVerified(stream, deviceName) {
+    setCameraStream(stream);
+    cameraStreamRef.current = stream;
+    setCameraStatus('connected');
+    setCameraDeviceName(deviceName);
+    attachCameraDisconnectListener(stream);
+    setFlow('pre-test');
+  }
+
+  // Handlers for verifying screen sharing
+  function handleScreenVerified(stream) {
+    setScreenStream(stream);
+    screenStreamRef.current = stream;
+    setScreenStatus('connected');
+    attachScreenDisconnectListener(stream);
+    setFlow('pre-test');
+  }
+
+  // End test handler (Requirement 16)
+  function handleEndTest() {
+    cleanupAllStreams();
+    setCameraStatus('not-checked');
+    setScreenStatus('not-checked');
+    setFlow('initial');
+  }
+
+  // Determine current active progress step (Requirement 10)
+  function getActiveStep() {
+    if (flow === 'camera-check') return 1;
+    if (flow === 'screen-check') return 2;
+    if (cameraStatus === 'connected' && screenStatus === 'connected') return 3;
+    if (cameraStatus === 'connected') return 2;
+    return 1;
+  }
+
+  const isBothConnected = cameraStatus === 'connected' && screenStatus === 'connected';
 
   return (
     <div className="heimdall-app">
-      {flow === 'camera' && (
-        <CameraCheckView onContinue={() => setFlow('screen-check')} />
+      {/* ── View 1: Initial Screen (Commit 1 & 2 integration) ── */}
+      {flow === 'initial' && (
+        <div className="heimdall-card">
+          <div className="heimdall-header">
+            <HeimdallLogo />
+          </div>
+          <div className="initial-hero">
+            <h1 className="initial-title">Newton Athena</h1>
+            <p className="initial-subtitle">Assessment Monitoring System</p>
+            <div className="initial-details-box">
+              <div className="detail-item">
+                <span className="detail-label">Assessment</span>
+                <span className="detail-value">Electron Application Development</span>
+              </div>
+              <div className="detail-item">
+                <span className="detail-label">Duration</span>
+                <span className="detail-value">60 Minutes</span>
+              </div>
+              <div className="detail-item">
+                <span className="detail-label">Required</span>
+                <span className="detail-value">Camera & Screen Sharing</span>
+              </div>
+            </div>
+            <button
+              id="start-test-btn"
+              className="btn-action-primary btn--large"
+              onClick={() => setFlow('pre-test')}
+            >
+              Start Test
+            </button>
+          </div>
+        </div>
       )}
 
-      {flow === 'screen-check' && (
-        <ScreenSharingCheckView
-          onBack={() => setFlow('camera')}
-          onContinue={() => setFlow('ready')}
+      {/* ── View 2: Pre-Test Device Check Screen (Commit 6 Goal) ── */}
+      {flow === 'pre-test' && (
+        <div className="heimdall-card">
+          <div className="heimdall-header">
+            <HeimdallLogo />
+          </div>
+
+          {/* Progress Indicator (Requirement 10) */}
+          <ProgressIndicator
+            activeStep={getActiveStep()}
+            cameraStatus={cameraStatus}
+            screenStatus={screenStatus}
+          />
+
+          {/* Title & Description (Requirement 1) */}
+          <div className="step-header" style={{ marginTop: '20px' }}>
+            <div>
+              <h2 className="step-title">Pre-Test Device Check</h2>
+              <p className="step-desc">
+                Before starting the assessment, please verify your camera and screen sharing.
+              </p>
+            </div>
+          </div>
+
+          <hr className="heimdall-divider" />
+
+          {/* Two Status Cards (Requirement 2 & 3 & 9) */}
+          <div className="device-cards-grid">
+            {/* Card 1: Camera */}
+            <div className={`device-status-card status--${cameraStatus}`}>
+              <div className="device-card-header">
+                <div className="device-card-icon-title">
+                  <div className="mini-icon-circle"><CameraIcon /></div>
+                  <h4>Camera</h4>
+                </div>
+                <span className="device-card-badge">
+                  {cameraStatus === 'connected' && '✓ Camera Connected'}
+                  {cameraStatus === 'error' && '✕ Camera Error'}
+                  {cameraStatus === 'disconnected' && '✕ Camera Disconnected'}
+                  {cameraStatus === 'not-checked' && '○ Camera Not Checked'}
+                </span>
+              </div>
+              <p className="device-card-detail">
+                {cameraStatus === 'connected' && (cameraDeviceName || 'Webcam verified and active')}
+                {cameraStatus === 'error' && 'Camera permission was denied or device unavailable.'}
+                {cameraStatus === 'disconnected' && 'Camera stream stopped. Please recheck.'}
+                {cameraStatus === 'not-checked' && 'Webcam access required to monitor assessment.'}
+              </p>
+              <button
+                id="check-camera-btn"
+                className="btn-card-action"
+                onClick={() => setFlow('camera-check')}
+              >
+                {cameraStatus === 'connected' ? 'Recheck Camera' : 'Check Camera'}
+              </button>
+            </div>
+
+            {/* Card 2: Screen Sharing */}
+            <div className={`device-status-card status--${screenStatus}`}>
+              <div className="device-card-header">
+                <div className="device-card-icon-title">
+                  <div className="mini-icon-circle"><ScreenIcon /></div>
+                  <h4>Screen Sharing</h4>
+                </div>
+                <span className="device-card-badge">
+                  {screenStatus === 'connected' && '✓ Screen Sharing Connected'}
+                  {screenStatus === 'error' && '✕ Screen Error'}
+                  {screenStatus === 'disconnected' && '✕ Screen Sharing Disconnected'}
+                  {screenStatus === 'not-checked' && '○ Screen Sharing Not Checked'}
+                </span>
+              </div>
+              <p className="device-card-detail">
+                {screenStatus === 'connected' && 'Screen capture stream verified and active'}
+                {screenStatus === 'error' && 'Screen sharing was cancelled or unavailable.'}
+                {screenStatus === 'disconnected' && 'Screen share ended. Please recheck.'}
+                {screenStatus === 'not-checked' && 'Entire screen sharing required before test.'}
+              </p>
+              <button
+                id="check-screen-btn"
+                className="btn-card-action"
+                onClick={() => setFlow('screen-check')}
+              >
+                {screenStatus === 'connected' ? 'Recheck Screen' : 'Check Screen Sharing'}
+              </button>
+            </div>
+          </div>
+
+          <hr className="heimdall-divider" />
+
+          {/* Readiness Notice (Requirement 7 & 8) */}
+          {isBothConnected ? (
+            <div className="notice notice--ok">
+              Your device is ready for the assessment.
+            </div>
+          ) : (
+            <div className="notice notice--warn">
+              {cameraStatus !== 'connected' && screenStatus !== 'connected'
+                ? 'Please complete both Camera and Screen Sharing checks before starting.'
+                : cameraStatus !== 'connected'
+                ? 'Camera check is incomplete. Please verify your camera.'
+                : 'Screen Sharing check is incomplete. Please verify screen sharing.'}
+            </div>
+          )}
+
+          {/* Action Row (Requirement 7, 8, 14) */}
+          <div className="btn-navigation-row" style={{ marginTop: '16px' }}>
+            <button
+              id="back-to-start-btn"
+              className="btn-action-ghost"
+              onClick={() => {
+                cleanupAllStreams();
+                setFlow('initial');
+              }}
+            >
+              Back
+            </button>
+            <button
+              id="start-assessment-btn"
+              className="btn-action-primary"
+              disabled={!isBothConnected}
+              onClick={() => setFlow('assessment-ready')}
+            >
+              Start Assessment
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── View 3: Dedicated Camera Check Step ── */}
+      {flow === 'camera-check' && (
+        <CameraCheckModal
+          currentStream={cameraStream}
+          onCameraVerified={handleCameraVerified}
+          onBack={() => setFlow('pre-test')}
         />
       )}
 
-      {flow === 'ready' && (
-        <AssessmentReadyView onBack={() => setFlow('screen-check')} />
+      {/* ── View 4: Dedicated Screen Sharing Step ── */}
+      {flow === 'screen-check' && (
+        <ScreenSharingModal
+          currentStream={screenStream}
+          onScreenVerified={handleScreenVerified}
+          onBack={() => setFlow('pre-test')}
+        />
+      )}
+
+      {/* ── View 5: Assessment Ready Placeholder Screen (Requirements 15 & 16) ── */}
+      {flow === 'assessment-ready' && (
+        <div className="heimdall-card">
+          <div className="heimdall-header">
+            <HeimdallLogo />
+          </div>
+
+          <div className="assessment-ready-hero">
+            <div className="assessment-ready-badge">
+              <CheckIcon />
+            </div>
+            <h2 className="step-title">Assessment Ready</h2>
+            <p className="step-desc">
+              Your camera and screen have been verified.
+            </p>
+            <div className="monitoring-status-pills">
+              <span className="pill-badge pill-green">● Camera Monitoring Active</span>
+              <span className="pill-badge pill-green">● Screen Monitoring Active</span>
+            </div>
+          </div>
+
+          <hr className="heimdall-divider" />
+
+          <div className="btn-navigation-row" style={{ justifyContent: 'center' }}>
+            <button
+              id="end-test-btn"
+              className="btn-action-danger"
+              onClick={handleEndTest}
+            >
+              End Test
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Bottom status text */}
