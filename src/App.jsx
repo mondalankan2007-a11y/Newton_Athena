@@ -262,6 +262,7 @@ function CameraCheckModal({ currentStream, onCameraVerified, onBack }) {
 function ScreenSharingModal({ currentStream, onScreenVerified, onBack }) {
   const [status, setStatus] = useState(currentStream ? 'connected' : 'not-started');
   const [statusMessage, setStatusMessage] = useState('');
+  const [needsSystemPermission, setNeedsSystemPermission] = useState(false);
 
   const screenVideoRef = useRef(null);
   const localStreamRef = useRef(currentStream || null);
@@ -272,13 +273,43 @@ function ScreenSharingModal({ currentStream, onScreenVerified, onBack }) {
     }
   }, []);
 
+  // Check initial macOS screen recording permission
+  useEffect(() => {
+    async function checkPermission() {
+      if (window.electronAPI?.getScreenAccessStatus) {
+        try {
+          const access = await window.electronAPI.getScreenAccessStatus();
+          if (access === 'denied') {
+            setNeedsSystemPermission(true);
+            setStatusMessage('macOS Screen Recording permission is required. Please enable it in System Settings.');
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+    checkPermission();
+  }, []);
+
   async function handleShareScreen() {
     setStatus('waiting');
     setStatusMessage('');
+    setNeedsSystemPermission(false);
 
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
         throw new Error('DisplayMediaUnsupported');
+      }
+
+      // Check macOS permission before requesting
+      if (window.electronAPI?.getScreenAccessStatus) {
+        const access = await window.electronAPI.getScreenAccessStatus();
+        if (access === 'denied') {
+          setStatus('error');
+          setNeedsSystemPermission(true);
+          setStatusMessage('Screen Recording permission is disabled in macOS System Settings.');
+          return;
+        }
       }
 
       const stream = await navigator.mediaDevices.getDisplayMedia({
@@ -289,19 +320,41 @@ function ScreenSharingModal({ currentStream, onScreenVerified, onBack }) {
       localStreamRef.current = stream;
       setStatus('connected');
       setStatusMessage('Screen sharing connected');
+      setNeedsSystemPermission(false);
 
       if (screenVideoRef.current) {
         screenVideoRef.current.srcObject = stream;
         screenVideoRef.current.play().catch(() => {});
       }
     } catch (err) {
-      if (err.name === 'NotAllowedError' || err.name === 'AbortError') {
+      // Check if it failed due to macOS system permission
+      let isSystemDenied = false;
+      if (window.electronAPI?.getScreenAccessStatus) {
+        try {
+          const access = await window.electronAPI.getScreenAccessStatus();
+          if (access === 'denied' || access === 'restricted') {
+            isSystemDenied = true;
+          }
+        } catch (e) {}
+      }
+
+      if (isSystemDenied) {
+        setStatus('error');
+        setNeedsSystemPermission(true);
+        setStatusMessage('macOS Screen Recording permission required. Please enable it in System Settings.');
+      } else if (err.name === 'NotAllowedError' || err.name === 'AbortError') {
         setStatus('not-started');
-        setStatusMessage('Screen sharing was not selected.');
+        setStatusMessage('Screen sharing was not selected or permission was denied.');
       } else {
         setStatus('error');
         setStatusMessage('Screen sharing permission was denied or unavailable.');
       }
+    }
+  }
+
+  function handleOpenSettings() {
+    if (window.electronAPI?.openScreenSecuritySettings) {
+      window.electronAPI.openScreenSecuritySettings();
     }
   }
 
@@ -359,6 +412,16 @@ function ScreenSharingModal({ currentStream, onScreenVerified, onBack }) {
               <div className="permission-status">
                 <div className="permission-notice-box">
                   <span>{statusMessage}</span>
+                  {needsSystemPermission && (
+                    <button
+                      type="button"
+                      id="open-settings-btn"
+                      className="btn-open-settings"
+                      onClick={handleOpenSettings}
+                    >
+                      Open macOS System Settings
+                    </button>
+                  )}
                 </div>
               </div>
             )}

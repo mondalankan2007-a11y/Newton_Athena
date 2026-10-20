@@ -11,10 +11,13 @@
  * screen monitoring, etc.).
  */
 
-const { contextBridge } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 
-// Expose a minimal app-info object to the renderer under window.electronAPI
+// Expose secure APIs to the renderer under window.electronAPI
 contextBridge.exposeInMainWorld('electronAPI', {
   appName: 'Newton Athena',
   version: '1.0.0',
+  isMac: process.platform === 'darwin',
+  getScreenAccessStatus: () => ipcRenderer.invoke('get-screen-access-status'),
+  openScreenSecuritySettings: () => ipcRenderer.invoke('open-screen-security-settings'),
 });

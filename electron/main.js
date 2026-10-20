@@ -1,4 +1,4 @@
-const { app, BrowserWindow, session, desktopCapturer } = require('electron');
+const { app, BrowserWindow, session, desktopCapturer, systemPreferences, shell, ipcMain } = require('electron');
 const path = require('path');
 
 // Detect if running in development (Vite dev server) or production (built files)
@@ -31,6 +31,32 @@ function createWindow() {
   }
 }
 
+// IPC handler to query macOS screen recording status
+ipcMain.handle('get-screen-access-status', () => {
+  if (process.platform === 'darwin' && systemPreferences && systemPreferences.getMediaAccessStatus) {
+    try {
+      return systemPreferences.getMediaAccessStatus('screen');
+    } catch (e) {
+      return 'unknown';
+    }
+  }
+  return 'granted';
+});
+
+// IPC handler to open macOS System Settings -> Screen Recording pane
+ipcMain.handle('open-screen-security-settings', async () => {
+  if (process.platform === 'darwin') {
+    try {
+      await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
+      return true;
+    } catch (e) {
+      console.warn('Failed to open security settings:', e);
+      return false;
+    }
+  }
+  return false;
+});
+
 app.whenReady().then(() => {
   // Handle media and screen capture permission requests securely
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
@@ -51,15 +77,31 @@ app.whenReady().then(() => {
   // Handle standard navigator.mediaDevices.getDisplayMedia() in Electron 33+
   session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
     try {
-      const sources = await desktopCapturer.getSources({ types: ['screen', 'window'] });
+      let sources = null;
+      try {
+        // First attempt: lightweight screen capture without thumbnail overhead
+        sources = await desktopCapturer.getSources({
+          types: ['screen'],
+          thumbnailSize: { width: 0, height: 0 },
+        });
+      } catch (screenErr) {
+        // Fallback attempt: screen + window
+        sources = await desktopCapturer.getSources({
+          types: ['screen', 'window'],
+          thumbnailSize: { width: 150, height: 150 },
+        });
+      }
+
       if (!sources || sources.length === 0) {
-        callback({ video: null });
+        callback(null);
         return;
       }
+
       callback({ video: sources[0] });
     } catch (err) {
-      console.warn('desktopCapturer error:', err);
-      callback({ video: null });
+      console.warn('desktopCapturer error:', err?.message || err);
+      // Deny gracefully by passing null (NEVER pass { video: null } as it throws TypeError)
+      callback(null);
     }
   });
 
