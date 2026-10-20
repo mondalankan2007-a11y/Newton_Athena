@@ -406,9 +406,28 @@ function ScreenSharingModal({ currentStream, onScreenVerified, onBack }) {
   );
 }
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Generates a short, human-readable session ID like "NA-X4F2A8" */
+function generateSessionId() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let id = 'NA-';
+  for (let i = 0; i < 6; i++) {
+    id += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return id;
+}
+
+/** Formats elapsed seconds into mm:ss string */
+function formatElapsed(seconds) {
+  const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
+  const ss = String(seconds % 60).padStart(2, '0');
+  return `${mm}:${ss}`;
+}
+
 // ── Root Application ────────────────────────────────────────────────────────
 export default function App() {
-  // Navigation flow: 'initial' | 'pre-test' | 'camera-check' | 'screen-check' | 'assessment-ready'
+  // Navigation flow: 'initial' | 'pre-test' | 'camera-check' | 'screen-check' | 'in-progress'
   const [flow, setFlow] = useState('initial');
 
   // Device check status states:
@@ -416,6 +435,14 @@ export default function App() {
   const [cameraStatus, setCameraStatus] = useState('not-checked');
   const [screenStatus, setScreenStatus] = useState('not-checked');
   const [cameraDeviceName, setCameraDeviceName] = useState('');
+
+  // ── Session state (Commit 7) ──────────────────────────────────────────────
+  // session: null | { sessionId, status, startedAt, endedAt }
+  const [session, setSession] = useState(null);
+  // elapsed seconds for the in-progress timer
+  const [elapsed, setElapsed] = useState(0);
+  // Ref to hold the interval ID so it can be cleared safely
+  const timerRef = useRef(null);
 
   // Active MediaStreams
   const [cameraStream, setCameraStream] = useState(null);
@@ -496,13 +523,56 @@ export default function App() {
     setFlow('pre-test');
   }
 
-  // End test handler (Requirement 16)
+  // ── Session management (Commit 7) ──────────────────────────────────────────
+
+  /** Start a new assessment session. Guards against double-start. */
+  function startSession() {
+    if (session && session.status === 'active') return; // already running
+
+    const newSession = {
+      sessionId: generateSessionId(),
+      status: 'active',
+      startedAt: new Date().toISOString(),
+      endedAt: null,
+    };
+
+    setSession(newSession);
+    setElapsed(0);
+    setFlow('in-progress');
+
+    // Start timer — one interval only
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      setElapsed((prev) => prev + 1);
+    }, 1000);
+  }
+
+  /** Stop timer and clean up the interval safely. */
+  function stopTimer() {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }
+
+  /** End the assessment: finalise session, stop timer, stop streams, go home. */
   function handleEndTest() {
+    stopTimer();
+    setSession((prev) =>
+      prev ? { ...prev, status: 'completed', endedAt: new Date().toISOString() } : prev
+    );
     cleanupAllStreams();
     setCameraStatus('not-checked');
     setScreenStatus('not-checked');
     setFlow('initial');
+    // Clear session after a tick so the UI doesn't flash
+    setTimeout(() => setSession(null), 50);
   }
+
+  // Clean up timer on unmount (prevents memory leaks / stale intervals)
+  useEffect(() => {
+    return () => stopTimer();
+  }, []);
 
   // Determine current active progress step (Requirement 10)
   function getActiveStep() {
@@ -671,7 +741,7 @@ export default function App() {
               id="start-assessment-btn"
               className="btn-action-primary"
               disabled={!isBothConnected}
-              onClick={() => setFlow('assessment-ready')}
+              onClick={startSession}
             >
               Start Assessment
             </button>
@@ -697,24 +767,60 @@ export default function App() {
         />
       )}
 
-      {/* ── View 5: Assessment Ready Placeholder Screen (Requirements 15 & 16) ── */}
-      {flow === 'assessment-ready' && (
+      {/* ── View 5: Assessment In Progress Screen (Commit 7) ── */}
+      {flow === 'in-progress' && session && (
         <div className="heimdall-card">
           <div className="heimdall-header">
             <HeimdallLogo />
           </div>
 
-          <div className="assessment-ready-hero">
-            <div className="assessment-ready-badge">
-              <CheckIcon />
+          {/* Status header row */}
+          <div className="session-status-header">
+            <div className="session-status-left">
+              <h2 className="step-title">Assessment In Progress</h2>
+              <p className="step-desc">Your session is being monitored. Do not close this window.</p>
             </div>
-            <h2 className="step-title">Assessment Ready</h2>
-            <p className="step-desc">
-              Your camera and screen have been verified.
-            </p>
-            <div className="monitoring-status-pills">
-              <span className="pill-badge pill-green">● Camera Monitoring Active</span>
-              <span className="pill-badge pill-green">● Screen Monitoring Active</span>
+            <div className="session-live-badge">
+              <span className="pulse-live-dot" />
+              <span>LIVE</span>
+            </div>
+          </div>
+
+          <hr className="heimdall-divider" />
+
+          {/* Session info grid */}
+          <div className="session-info-grid">
+            <div className="session-info-item">
+              <span className="session-info-label">Session ID</span>
+              <span className="session-info-value session-id-mono">{session.sessionId}</span>
+            </div>
+            <div className="session-info-item">
+              <span className="session-info-label">Status</span>
+              <span className="session-info-value status-active-text">● Active</span>
+            </div>
+            <div className="session-info-item">
+              <span className="session-info-label">Time Elapsed</span>
+              <span className="session-info-value session-timer-display">{formatElapsed(elapsed)}</span>
+            </div>
+            <div className="session-info-item">
+              <span className="session-info-label">Started At</span>
+              <span className="session-info-value">
+                {new Date(session.startedAt).toLocaleTimeString()}
+              </span>
+            </div>
+          </div>
+
+          <hr className="heimdall-divider" />
+
+          {/* Device monitoring status */}
+          <div className="session-devices-row">
+            <div className="session-device-pill">
+              <span className="device-pill-dot dot-green" />
+              <span>Camera: Connected</span>
+            </div>
+            <div className="session-device-pill">
+              <span className="device-pill-dot dot-green" />
+              <span>Screen: Connected</span>
             </div>
           </div>
 
