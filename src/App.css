@@ -224,14 +224,21 @@
   letter-spacing: 0.2px;
 }
 
-.btn:hover {
+.btn:hover:not(:disabled) {
   opacity: 0.88;
   transform: translateY(-1px);
 }
 
-.btn:active {
+.btn:active:not(:disabled) {
   transform: translateY(0);
   opacity: 1;
+}
+
+.btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
 }
 
 .btn--primary {
@@ -252,9 +259,16 @@
   border: 1px solid #334155;
 }
 
-.btn--secondary:hover {
+.btn--secondary:hover:not(:disabled) {
   background: #27354a;
   color: #ffffff;
+}
+
+.btn--sm {
+  padding: 8px 16px;
+  font-size: 13px;
+  width: auto;
+  align-self: flex-start;
 }
 
 /* ── Button row (side-by-side) ───────────────────────────── */
@@ -273,47 +287,134 @@
   width: auto;
 }
 
-/* ── Camera Ready Section ─────────────────────────────────── */
-.camera-ready-section {
+/* ── Camera Check Section ─────────────────────────────────── */
+.camera-check-section {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.camera-header-status {
+.camera-check-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 12px;
 }
 
-.camera-status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  background: rgba(16, 185, 129, 0.12);
-  border: 1px solid rgba(16, 185, 129, 0.3);
-  padding: 4px 10px;
-  border-radius: 9999px;
-  font-size: 13px;
+.camera-check-title {
+  font-size: 15px;
   font-weight: 600;
+  color: #f1f5f9;
+  margin-bottom: 3px;
+  letter-spacing: 0.2px;
+}
+
+.camera-status-line {
+  font-size: 13px;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.camera-status-label {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.camera-status-value {
+  font-weight: 600;
+}
+
+.camera-status-value--connected {
   color: #10b981;
 }
 
-.camera-status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #10b981;
-  box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+.camera-status-value--denied,
+.camera-status-value--unavailable {
+  color: #ef4444;
 }
 
-.camera-subtext {
-  font-size: 13px;
+.camera-status-value--requesting {
+  color: #f59e0b;
+}
+
+.camera-status-value--not-checked {
+  color: #64748b;
+}
+
+/* ── Status Indicator Badges ─────────────────────────────── */
+.camera-indicator-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.camera-indicator-bullet {
+  font-size: 11px;
+}
+
+.camera-indicator-badge--connected {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #10b981;
+}
+
+.camera-indicator-badge--denied,
+.camera-indicator-badge--unavailable {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+}
+
+.camera-indicator-badge--requesting {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #fcd34d;
+}
+
+.camera-indicator-badge--not-checked {
+  background: rgba(100, 116, 139, 0.12);
+  border: 1px solid rgba(100, 116, 139, 0.3);
   color: #94a3b8;
 }
 
+/* ── Camera Notice & Error Containers ─────────────────────── */
+.camera-notice-box--requesting {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  color: #fcd34d;
+  font-size: 14px;
+}
+
+.camera-spinner-small {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(245, 158, 11, 0.25);
+  border-top-color: #f59e0b;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+.camera-error-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ── Camera Preview Card ─────────────────────────────────── */
 .camera-preview-card {
   position: relative;
   width: 100%;
@@ -326,6 +427,29 @@
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.camera-preview-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px dashed rgba(51, 65, 85, 0.6);
+  border-radius: 10px;
+}
+
+.camera-empty-icon {
+  color: #475569;
+}
+
+.camera-empty-text {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
 }
 
 .camera-video-feed {

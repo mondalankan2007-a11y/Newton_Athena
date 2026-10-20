@@ -3,10 +3,10 @@ import './App.css';
 
 /*
   Flow states:
-    'idle'        → Initial landing screen
-    'preparing'   → After "Start Test" is clicked
-    'waiting'     → Camera permission & preview step
-    'next'        → Camera verified, ready for next phase
+    'idle'          → Initial landing screen
+    'preparing'     → Test info & permissions warning
+    'camera'        → Dedicated Camera Check & live preview step
+    'device-check'  → Intermediate Device Check screen
 */
 
 const ASSESSMENT_INFO = {
@@ -18,7 +18,7 @@ const ASSESSMENT_INFO = {
 // ── StatusRow: coloured dot + label ─────────────────────────────────────────
 function StatusRow({ label, value, color }) {
   const colors = {
-    idle:  '#475569',   // grey
+    idle:  '#475569',   // slate grey
     warn:  '#f59e0b',   // amber
     ok:    '#10b981',   // emerald green
     error: '#ef4444',   // rose red
@@ -34,35 +34,44 @@ function StatusRow({ label, value, color }) {
   );
 }
 
-// ── CameraStep: handles camera permission, preview, and track cleanup ────────
-function CameraStep({ onCameraStateChange, onBack, onContinue }) {
-  const [cameraState, setCameraState] = useState('requesting'); // 'requesting' | 'granted' | 'denied' | 'error'
+// ── CameraCheckStep: Dedicated camera setup & verification section ──────────
+function CameraCheckStep({ onCameraStatusChange, onBack, onContinue }) {
+  // Requirement 1: React state managing:
+  // 'not-checked' | 'requesting' | 'connected' | 'denied' | 'unavailable'
+  const [cameraStatus, setCameraStatus] = useState('not-checked');
   const [errorMessage, setErrorMessage] = useState('');
+  const [cameraStream, setCameraStream] = useState(null);
   const [retryKey, setRetryKey] = useState(0);
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
 
+  // Requirement 8: Helper to stop active camera tracks properly
+  function stopStream() {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    setCameraStream(null);
+  }
+
   useEffect(() => {
     let isCancelled = false;
 
     async function requestCamera() {
-      setCameraState('requesting');
-      setErrorMessage('');
-      onCameraStateChange('requesting');
+      // Ensure any existing camera stream is stopped before requesting again
+      stopStream();
 
-      // Stop any existing stream tracks before creating a new one
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-      }
+      setCameraStatus('requesting');
+      setErrorMessage('');
+      onCameraStatusChange('requesting');
 
       try {
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          throw new Error('MediaDevices API is not supported in this environment.');
+          throw new Error('MediaDevicesUnsupported');
         }
 
-        // Requirement 2 & 13: Request video only, never microphone
+        // Video only — never microphone access
         const stream = await navigator.mediaDevices.getUserMedia({
           video: true,
           audio: false,
@@ -75,184 +84,194 @@ function CameraStep({ onCameraStateChange, onBack, onContinue }) {
         }
 
         streamRef.current = stream;
-        setCameraState('granted');
-        onCameraStateChange('granted');
-
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play().catch((err) => {
-            console.warn('Video autoPlay prevented:', err);
-          });
-        }
+        setCameraStream(stream);
+        setCameraStatus('connected');
+        onCameraStatusChange('connected');
       } catch (err) {
         if (isCancelled) return;
 
-        console.error('Camera access error:', err);
+        console.warn('Camera access check result:', err.name || err.message);
 
+        // Requirement 4: Handle possible errors separately without raw technical errors
         if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-          setCameraState('denied');
-          setErrorMessage('Camera permission was denied.');
-          onCameraStateChange('denied');
+          setCameraStatus('denied');
+          setErrorMessage('Camera access is required to continue with the monitored assessment.');
+          onCameraStatusChange('denied');
         } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-          setCameraState('error');
-          setErrorMessage('No camera device found on this system.');
-          onCameraStateChange('error');
+          setCameraStatus('unavailable');
+          setErrorMessage('No camera device was detected on your system. Please connect a webcam and try again.');
+          onCameraStatusChange('unavailable');
         } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
-          setCameraState('error');
-          setErrorMessage('Camera is currently in use by another application.');
-          onCameraStateChange('error');
+          setCameraStatus('unavailable');
+          setErrorMessage('Your camera is currently being used by another application. Please close other apps and try again.');
+          onCameraStatusChange('unavailable');
         } else {
-          setCameraState('error');
-          setErrorMessage(err.message || 'Unable to access camera.');
-          onCameraStateChange('error');
+          setCameraStatus('unavailable');
+          setErrorMessage('Unable to access camera media stream. Please verify your system permissions and try again.');
+          onCameraStatusChange('unavailable');
         }
       }
     }
 
     requestCamera();
 
-    // Cleanup: stops camera tracks when component unmounts or before retry
+    // Requirement 8: Stop stream when unmounting or before retry
     return () => {
       isCancelled = true;
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-      }
+      stopStream();
     };
   }, [retryKey]);
 
-  // Bind video element whenever stream and videoRef are available
+  // Bind video element when connected and stream is active
   useEffect(() => {
-    if (cameraState === 'granted' && videoRef.current && streamRef.current) {
-      videoRef.current.srcObject = streamRef.current;
+    if (cameraStatus === 'connected' && cameraStream && videoRef.current) {
+      videoRef.current.srcObject = cameraStream;
+      videoRef.current.play().catch((err) => {
+        console.warn('Video autoPlay prevented:', err);
+      });
     }
-  }, [cameraState]);
+  }, [cameraStatus, cameraStream]);
 
+  // Requirement 3: Try Again requests camera permission again
   function handleTryAgain() {
     setRetryKey((prev) => prev + 1);
   }
 
+  // Requirement 8: Stop stream on leaving the camera screen
   function handleBackClick() {
-    // Stop camera tracks immediately when navigating back
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
+    stopStream();
     onBack();
   }
 
   function handleContinueClick() {
-    // Stop camera tracks when moving forward from camera step
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
+    stopStream();
     onContinue();
   }
 
-  // 1. Requesting state
-  if (cameraState === 'requesting') {
-    return (
-      <div className="flow-block">
-        <div className="camera-loading-box">
-          <div className="camera-spinner" />
-          <p className="loading-text">Requesting camera permission...</p>
-        </div>
-        <button
-          id="back-btn-requesting"
-          className="btn btn--ghost"
-          onClick={handleBackClick}
-        >
-          Back
-        </button>
-      </div>
-    );
+  // Requirement 1: Status display labels
+  function getStatusLabel(status) {
+    switch (status) {
+      case 'not-checked':
+        return 'Not checked';
+      case 'requesting':
+        return 'Requesting permission';
+      case 'connected':
+        return 'Camera connected';
+      case 'denied':
+        return 'Permission denied';
+      case 'unavailable':
+        return 'Camera unavailable';
+      default:
+        return 'Not checked';
+    }
   }
 
-  // 2. Denied state
-  if (cameraState === 'denied') {
-    return (
-      <div className="flow-block">
-        <div className="notice notice--error">
-          Camera permission was denied.
-        </div>
-        <p className="flow-description">
-          Please enable camera access in your system settings to continue with the assessment.
-        </p>
-        <div className="btn-row">
-          <button
-            id="back-btn-denied"
-            className="btn btn--ghost"
-            onClick={handleBackClick}
-          >
-            Back
-          </button>
-          <button
-            id="try-again-btn"
-            className="btn btn--primary"
-            onClick={handleTryAgain}
-          >
-            Try Again
-          </button>
-        </div>
-      </div>
-    );
+  // Requirement 2: Status indicator badge text
+  function getIndicatorText(status) {
+    switch (status) {
+      case 'connected':
+        return 'Camera Connected';
+      case 'denied':
+        return 'Camera Permission Required';
+      case 'unavailable':
+        return 'Camera Unavailable';
+      case 'requesting':
+        return 'Requesting Permission';
+      case 'not-checked':
+        return 'Not Checked';
+      default:
+        return 'Not Checked';
+    }
   }
 
-  // 3. Error state
-  if (cameraState === 'error') {
-    return (
-      <div className="flow-block">
-        <div className="notice notice--error">
-          {errorMessage || 'Unable to access camera.'}
-        </div>
-        <p className="flow-description">
-          Please verify your camera is plugged in and not in use by another application.
-        </p>
-        <div className="btn-row">
-          <button
-            id="back-btn-error"
-            className="btn btn--ghost"
-            onClick={handleBackClick}
-          >
-            Back
-          </button>
-          <button
-            id="try-again-btn"
-            className="btn btn--primary"
-            onClick={handleTryAgain}
-          >
-            Try Again
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // 4. Camera Ready section with live preview
   return (
-    <div className="flow-block camera-ready-section">
-      <div className="camera-header-status">
-        <div className="camera-status-badge">
-          <span className="camera-status-dot" />
-          <span className="camera-status-text">Camera: Connected</span>
+    <div className="flow-block camera-check-section">
+      {/* ── Section Title & Indicator (Requirements 1 & 2) ── */}
+      <div className="camera-check-header">
+        <div>
+          <h3 className="camera-check-title">Camera Check</h3>
+          <div className="camera-status-line">
+            <span className="camera-status-label">Status: </span>
+            <span className={`camera-status-value camera-status-value--${cameraStatus}`}>
+              {getStatusLabel(cameraStatus)}
+            </span>
+          </div>
         </div>
-        <span className="camera-subtext">Camera permission granted</span>
+
+        <div className={`camera-indicator-badge camera-indicator-badge--${cameraStatus}`}>
+          <span className="camera-indicator-bullet">●</span>
+          <span className="camera-indicator-text">{getIndicatorText(cameraStatus)}</span>
+        </div>
       </div>
 
+      {/* ── Status Messages & Try Again Button (Requirements 3 & 4) ── */}
+      {cameraStatus === 'requesting' && (
+        <div className="camera-notice-box camera-notice-box--requesting">
+          <div className="camera-spinner-small" />
+          <span>Requesting camera permission...</span>
+        </div>
+      )}
+
+      {(cameraStatus === 'denied' || cameraStatus === 'unavailable') && (
+        <div className="camera-error-box">
+          <div className="notice notice--error">
+            {cameraStatus === 'denied'
+              ? 'Camera access is required to continue with the monitored assessment.'
+              : errorMessage}
+          </div>
+          <button
+            id="try-again-btn"
+            className="btn btn--secondary btn--sm"
+            onClick={handleTryAgain}
+          >
+            Try Again
+          </button>
+        </div>
+      )}
+
+      {cameraStatus === 'connected' && (
+        <div className="notice notice--ok">
+          Camera permission granted. Live preview is active.
+        </div>
+      )}
+
+      {/* ── Camera Preview Card (Requirement 5) ── */}
       <div className="camera-preview-card">
-        <video
-          ref={videoRef}
-          autoPlay
-          muted
-          playsInline
-          className="camera-video-feed"
-        />
-        <div className="camera-overlay-badge">
-          <span className="pulse-dot" /> LIVE PREVIEW
-        </div>
+        {cameraStatus === 'connected' && cameraStream ? (
+          <>
+            <video
+              ref={videoRef}
+              autoPlay
+              muted
+              playsInline
+              className="camera-video-feed"
+            />
+            <div className="camera-overlay-badge">
+              <span className="pulse-dot" /> LIVE PREVIEW
+            </div>
+          </>
+        ) : (
+          <div className="camera-preview-empty">
+            <svg
+              className="camera-empty-icon"
+              width="32"
+              height="32"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+              <line x1="1" y1="1" x2="23" y2="23" />
+            </svg>
+            <p className="camera-empty-text">Camera preview unavailable</p>
+          </div>
+        )}
       </div>
 
+      {/* ── Action Buttons (Requirement 6) ── */}
       <div className="btn-row">
         <button
           id="back-btn-camera"
@@ -264,6 +283,7 @@ function CameraStep({ onCameraStateChange, onBack, onContinue }) {
         <button
           id="continue-btn-camera"
           className="btn btn--primary"
+          disabled={cameraStatus !== 'connected' || !cameraStream}
           onClick={handleContinueClick}
         >
           Continue
@@ -273,34 +293,34 @@ function CameraStep({ onCameraStateChange, onBack, onContinue }) {
   );
 }
 
-// ── Main App ────────────────────────────────────────────────────────────────
+// ── Main App Component ──────────────────────────────────────────────────────
 export default function App() {
   const [flow, setFlow] = useState('idle');
-  const [cameraState, setCameraState] = useState(null);
+  const [cameraStatus, setCameraStatus] = useState('not-checked');
 
   function handleStartTest() {
     setFlow('preparing');
   }
 
   function handleContinueFromPreparing() {
-    setFlow('waiting');
+    setFlow('camera');
   }
 
   function handleBackToIdle() {
-    setCameraState(null);
+    setCameraStatus('not-checked');
     setFlow('idle');
   }
 
   function handleBackToPreparing() {
-    setCameraState(null);
+    setCameraStatus('not-checked');
     setFlow('preparing');
   }
 
   function handleContinueFromCamera() {
-    setFlow('next');
+    setFlow('device-check');
   }
 
-  // Derived system status
+  // Compute status map for System Status section
   function getSystemStatus() {
     if (flow === 'idle') {
       return {
@@ -316,39 +336,35 @@ export default function App() {
         test:   { value: 'Preparing Test', color: 'warn' },
       };
     }
-    if (flow === 'waiting') {
-      if (cameraState === 'granted') {
-        return {
-          camera: { value: 'Connected', color: 'ok' },
-          screen: { value: 'Not Started', color: 'idle' },
-          test:   { value: 'Camera Ready', color: 'ok' },
-        };
+    if (flow === 'camera') {
+      let camRow = { value: 'Not checked', color: 'idle' };
+      let testRow = { value: 'Device Check', color: 'warn' };
+
+      if (cameraStatus === 'requesting') {
+        camRow = { value: 'Requesting permission', color: 'warn' };
+        testRow = { value: 'Checking Camera', color: 'warn' };
+      } else if (cameraStatus === 'connected') {
+        camRow = { value: 'Camera connected', color: 'ok' };
+        testRow = { value: 'Camera Ready', color: 'ok' };
+      } else if (cameraStatus === 'denied') {
+        camRow = { value: 'Permission denied', color: 'error' };
+        testRow = { value: 'Action Required', color: 'warn' };
+      } else if (cameraStatus === 'unavailable') {
+        camRow = { value: 'Camera unavailable', color: 'error' };
+        testRow = { value: 'Camera Unavailable', color: 'error' };
       }
-      if (cameraState === 'denied') {
-        return {
-          camera: { value: 'Permission Denied', color: 'error' },
-          screen: { value: 'Not Started', color: 'idle' },
-          test:   { value: 'Action Required', color: 'warn' },
-        };
-      }
-      if (cameraState === 'error') {
-        return {
-          camera: { value: 'Error', color: 'error' },
-          screen: { value: 'Not Started', color: 'idle' },
-          test:   { value: 'Camera Error', color: 'error' },
-        };
-      }
+
       return {
-        camera: { value: 'Requesting...', color: 'warn' },
+        camera: camRow,
         screen: { value: 'Not Started', color: 'idle' },
-        test:   { value: 'Waiting for Permissions', color: 'warn' },
+        test:   testRow,
       };
     }
-    if (flow === 'next') {
+    if (flow === 'device-check') {
       return {
-        camera: { value: 'Connected (Verified)', color: 'ok' },
+        camera: { value: 'Camera connected', color: 'ok' },
         screen: { value: 'Not Started', color: 'idle' },
-        test:   { value: 'Ready for Next Step', color: 'ok' },
+        test:   { value: 'Device Check', color: 'ok' },
       };
     }
     return {
@@ -451,28 +467,32 @@ export default function App() {
           </div>
         )}
 
-        {/* ── Flow: Camera Permission & Preview Step ── */}
-        {flow === 'waiting' && (
-          <CameraStep
-            onCameraStateChange={setCameraState}
+        {/* ── Flow: Dedicated Camera Check Step (Commit 4) ── */}
+        {flow === 'camera' && (
+          <CameraCheckStep
+            onCameraStatusChange={setCameraStatus}
             onBack={handleBackToPreparing}
             onContinue={handleContinueFromCamera}
           />
         )}
 
-        {/* ── Flow: Next Stage (Post-Camera) ── */}
-        {flow === 'next' && (
-          <div className="flow-block">
+        {/* ── Flow: Device Check Page (Requirement 7) ── */}
+        {flow === 'device-check' && (
+          <div className="flow-block device-check-section">
+            <h3 className="section-title">Device Check</h3>
             <div className="notice notice--ok">
-              Camera verification complete. Next assessment steps will be configured in the next phase.
+              Camera check completed.
             </div>
+            <p className="flow-description">
+              Next, we will check screen sharing.
+            </p>
             <div className="btn-row">
               <button
-                id="back-to-camera-btn"
+                id="back-btn-device-check"
                 className="btn btn--ghost"
-                onClick={() => setFlow('waiting')}
+                onClick={() => setFlow('camera')}
               >
-                Back to Camera
+                Back
               </button>
               <button
                 id="reset-btn"
