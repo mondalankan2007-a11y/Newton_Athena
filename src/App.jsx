@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { createSession, endSession } from './services/api';
 import './App.css';
 
 // ── Icons ───────────────────────────────────────────────────────────────────
@@ -499,13 +500,19 @@ export default function App() {
   const [screenStatus, setScreenStatus] = useState('not-checked');
   const [cameraDeviceName, setCameraDeviceName] = useState('');
 
-  // ── Session state (Commit 7) ──────────────────────────────────────────────
+  // ── Session state (Commit 7 & 10) ──────────────────────────────────────────
   // session: null | { sessionId, status, startedAt, endedAt }
   const [session, setSession] = useState(null);
   // elapsed seconds for the in-progress timer
   const [elapsed, setElapsed] = useState(0);
   // Ref to hold the interval ID so it can be cleared safely
   const timerRef = useRef(null);
+
+  // Backend session synchronization states (Commit 10)
+  const [isStartingSession, setIsStartingSession] = useState(false);
+  const [isEndingSession, setIsEndingSession] = useState(false);
+  const [backendError, setBackendError] = useState('');
+  const [pendingSessionId, setPendingSessionId] = useState('');
 
   // Active MediaStreams
   const [cameraStream, setCameraStream] = useState(null);
@@ -586,28 +593,46 @@ export default function App() {
     setFlow('pre-test');
   }
 
-  // ── Session management (Commit 7) ──────────────────────────────────────────
+  // ── Session management (Commit 7 & 10) ─────────────────────────────────────
 
-  /** Start a new assessment session. Guards against double-start. */
-  function startSession() {
+  /** Start a new assessment session with the backend. Guards against double-start. */
+  async function startSession() {
     if (session && session.status === 'active') return; // already running
+    if (isStartingSession) return; // already in flight
 
-    const newSession = {
-      sessionId: generateSessionId(),
-      status: 'active',
-      startedAt: new Date().toISOString(),
-      endedAt: null,
-    };
+    // Reuse pending sessionId on retry or generate a new one
+    const sessionIdToUse = pendingSessionId || generateSessionId();
+    setPendingSessionId(sessionIdToUse);
+    setIsStartingSession(true);
+    setBackendError('');
 
-    setSession(newSession);
-    setElapsed(0);
-    setFlow('in-progress');
+    try {
+      // Connect to Express backend: POST /api/sessions
+      const response = await createSession(sessionIdToUse);
 
-    // Start timer — one interval only
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => {
-      setElapsed((prev) => prev + 1);
-    }, 1000);
+      const backendSession = response?.session || {
+        sessionId: sessionIdToUse,
+        status: 'active',
+        startedAt: new Date().toISOString(),
+        endedAt: null,
+      };
+
+      setSession(backendSession);
+      setPendingSessionId('');
+      setElapsed(0);
+      setFlow('in-progress');
+
+      // Start timer — one interval only
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = setInterval(() => {
+        setElapsed((prev) => prev + 1);
+      }, 1000);
+    } catch (err) {
+      console.error('Failed to start assessment session on backend:', err);
+      setBackendError(err.message || 'Unable to connect to the assessment server.');
+    } finally {
+      setIsStartingSession(false);
+    }
   }
 
   /** Stop timer and clean up the interval safely. */
@@ -618,8 +643,21 @@ export default function App() {
     }
   }
 
-  /** End the assessment: finalise session, stop timer, stop streams, go home. */
-  function handleEndTest() {
+  /** End the assessment: notify backend, stop timer, stop streams, go home. */
+  async function handleEndTest() {
+    if (isEndingSession) return;
+    setIsEndingSession(true);
+
+    // Notify backend: PATCH /api/sessions/:sessionId/end
+    if (session?.sessionId) {
+      try {
+        await endSession(session.sessionId);
+      } catch (err) {
+        console.warn('Could not complete session on backend:', err.message);
+      }
+    }
+
+    // Always cleanly reset local state (Requirement 11)
     stopTimer();
     setSession((prev) =>
       prev ? { ...prev, status: 'completed', endedAt: new Date().toISOString() } : prev
@@ -627,7 +665,11 @@ export default function App() {
     cleanupAllStreams();
     setCameraStatus('not-checked');
     setScreenStatus('not-checked');
+    setBackendError('');
+    setPendingSessionId('');
+    setIsEndingSession(false);
     setFlow('initial');
+
     // Clear session after a tick so the UI doesn't flash
     setTimeout(() => setSession(null), 50);
   }
@@ -788,6 +830,23 @@ export default function App() {
             </div>
           )}
 
+          {/* Backend Error Box with Retry (Requirement 6 & 7) */}
+          {backendError && (
+            <div className="backend-error-box">
+              <div className="backend-error-msg">
+                <span>⚠️ {backendError}</span>
+              </div>
+              <button
+                id="retry-start-btn"
+                className="btn-retry-action"
+                onClick={startSession}
+                disabled={isStartingSession}
+              >
+                {isStartingSession ? 'Retrying...' : 'Retry'}
+              </button>
+            </div>
+          )}
+
           {/* Action Row (Requirement 7, 8, 14) */}
           <div className="btn-navigation-row" style={{ marginTop: '16px' }}>
             <button
@@ -795,6 +854,8 @@ export default function App() {
               className="btn-action-ghost"
               onClick={() => {
                 cleanupAllStreams();
+                setBackendError('');
+                setPendingSessionId('');
                 setFlow('initial');
               }}
             >
@@ -803,10 +864,10 @@ export default function App() {
             <button
               id="start-assessment-btn"
               className="btn-action-primary"
-              disabled={!isBothConnected}
+              disabled={!isBothConnected || isStartingSession}
               onClick={startSession}
             >
-              Start Assessment
+              {isStartingSession ? 'Starting assessment...' : 'Start Assessment'}
             </button>
           </div>
         </div>
@@ -875,8 +936,12 @@ export default function App() {
 
           <hr className="heimdall-divider" />
 
-          {/* Device monitoring status */}
+          {/* Device and Backend monitoring status (Requirement 5) */}
           <div className="session-devices-row">
+            <div className="session-device-pill">
+              <span className="device-pill-dot dot-green" />
+              <span>Backend: Connected</span>
+            </div>
             <div className="session-device-pill">
               <span className="device-pill-dot dot-green" />
               <span>Camera: Connected</span>
@@ -893,9 +958,10 @@ export default function App() {
             <button
               id="end-test-btn"
               className="btn-action-danger"
+              disabled={isEndingSession}
               onClick={handleEndTest}
             >
-              End Test
+              {isEndingSession ? 'Ending assessment...' : 'End Test'}
             </button>
           </div>
         </div>

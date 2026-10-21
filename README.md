@@ -137,6 +137,34 @@ Runs the standalone Express backend server:
   }
   ```
 
+### Frontend → Backend Communication
+
+When the user starts the assessment in the Electron app, the frontend synchronizes the session with the backend API:
+
+```
+Frontend (React/Electron)
+    ↓
+POST /api/sessions  { "sessionId": "NA-XXXXXX" }
+    ↓
+Express Backend (port 3001)
+    ↓
+Session created in memory & returned
+    ↓
+Frontend marks session active & starts timer
+```
+
+When the user finishes the test:
+```
+Frontend (React/Electron)
+    ↓
+PATCH /api/sessions/:sessionId/end
+    ↓
+Express Backend
+    ↓
+Session marked completed & endedAt recorded
+    ↓
+Frontend cleans up camera, screen, & timer
+```
 
 ## Building for Production
 

@@ -1050,6 +1050,50 @@ body {
   box-shadow: 0 0 5px rgba(16, 185, 129, 0.6);
 }
 
+/* ── Backend Connection Error Box (Commit 10) ──────────────────────── */
+.backend-error-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-top: 14px;
+}
+
+.backend-error-msg {
+  color: #fca5a5;
+  font-size: 13px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-retry-action {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffffff;
+  background: #dc2626;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.btn-retry-action:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+.btn-retry-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* ── Responsive ────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .heimdall-card {
