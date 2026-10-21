@@ -13,6 +13,8 @@ app.use(express.json());
 
 // ── Routes ───────────────────────────────────────────────────────────────────
 
+const sessionsRouter = require('./routes/sessions');
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.status(200).json({
@@ -28,6 +30,9 @@ app.get('/api', (req, res) => {
     version: '1.0.0'
   });
 });
+
+// Session management endpoints
+app.use('/api/sessions', sessionsRouter);
 
 // ── 404 Catch-All Handler ───────────────────────────────────────────────────
 app.use((req, res) => {
