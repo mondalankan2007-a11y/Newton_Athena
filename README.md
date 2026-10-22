@@ -166,6 +166,34 @@ Session marked completed & endedAt recorded
 Frontend cleans up camera, screen, & timer
 ```
 
+### Active Assessment Backend Monitoring (Commit 11)
+
+While an assessment is actively running (`flow === 'in-progress'`), the frontend continuously monitors server connectivity and session state:
+
+1. **Initial Connection Check**:
+   - As soon as the assessment screen opens, a non-blocking background connection check is performed.
+   - Shows `Backend: Checking...` while the check is in flight.
+   - Transitions to `Backend: Connected` once verified, or `Backend: Disconnected` if unreachable.
+
+2. **Periodic Session Check (Every 10 Seconds)**:
+   - Polls `GET /api/sessions/:sessionId` every 10 seconds.
+   - Updates the **Last server check** timestamp (e.g. `Last server check: 22:15:32`).
+   - If `status: "active"` is returned, the local assessment continues normally.
+   - If `status: "completed"` is returned (e.g. terminated remotely by an administrator), the local assessment safely and cleanly ends (stops timers, releases media streams, resets state).
+
+3. **Connection Failure Resilience**:
+   - If the backend is unreachable during a check, the app **does not crash** and **does not abruptly end** the assessment.
+   - The indicator switches to `Backend: Disconnected` and displays a warning banner: *"Connection to the assessment server was lost. Retrying..."*.
+   - A **Retry Connection** button allows manual immediate re-checking via `getBackendHealth()`.
+   - The 10-second periodic poll automatically recovers once the backend is reachable again.
+
+4. **Interval Cleanup & Leak Prevention**:
+   - The 10-second timer is strictly tied to the active assessment lifecycle and cleaned up when:
+     - The assessment ends (locally or remotely)
+     - The component unmounts
+     - The `sessionId` changes
+   - Prevents duplicate intervals or lingering network requests when navigating between screens.
+
 ## Building for Production
 
 ```bash

@@ -5,6 +5,34 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 /**
+ * Checks the health status of the backend server.
+ * @returns {Promise<{ status: string, service?: string }>}
+ */
+export async function getBackendHealth() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/health`);
+
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      const errorMessage = data?.error || getHttpErrorMessage(response.status);
+      const error = new Error(errorMessage);
+      error.status = response.status;
+      throw error;
+    }
+
+    return data;
+  } catch (err) {
+    if (err.status) {
+      throw err;
+    }
+    const networkError = new Error('Unable to connect to the assessment server.');
+    networkError.isNetworkError = true;
+    throw networkError;
+  }
+}
+
+/**
  * Creates a new assessment session on the backend.
  * @param {string} sessionId
  * @returns {Promise<{ success: boolean, session: object }>}

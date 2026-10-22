@@ -1050,6 +1050,62 @@ body {
   box-shadow: 0 0 5px rgba(16, 185, 129, 0.6);
 }
 
+.device-pill-dot.dot-amber {
+  background: #f59e0b;
+  box-shadow: 0 0 5px rgba(245, 158, 11, 0.6);
+  animation: livePulse 1.2s ease-in-out infinite;
+}
+
+.device-pill-dot.dot-red {
+  background: #ef4444;
+  box-shadow: 0 0 5px rgba(239, 68, 68, 0.6);
+}
+
+.session-device-pill.pill--checking {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.25);
+  color: #f59e0b;
+}
+
+.session-device-pill.pill--disconnected {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.25);
+  color: #ef4444;
+}
+
+/* ── Last Server Check & Session Warning (Commit 11) ───────────────── */
+.session-last-check-row {
+  margin-top: 10px;
+}
+
+.last-check-text {
+  font-size: 13px;
+  color: #94a3b8;
+  font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+  letter-spacing: 0.3px;
+}
+
+.session-server-warning-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-top: 14px;
+}
+
+.session-server-warning-box .warning-content {
+  color: #fca5a5;
+  font-size: 13px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 /* ── Backend Connection Error Box (Commit 10) ──────────────────────── */
 .backend-error-box {
   display: flex;

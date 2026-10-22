@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { createSession, endSession } from './services/api';
+import { createSession, endSession, getSession, getBackendHealth } from './services/api';
 import './App.css';
 
 // ── Icons ───────────────────────────────────────────────────────────────────
@@ -489,6 +489,15 @@ function formatElapsed(seconds) {
   return `${mm}:${ss}`;
 }
 
+/** Formats Date into 24-hour HH:MM:SS string, e.g. "22:15:32" */
+function formatCheckTime(date = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0');
+  const h = pad(date.getHours());
+  const m = pad(date.getMinutes());
+  const s = pad(date.getSeconds());
+  return `${h}:${m}:${s}`;
+}
+
 // ── Root Application ────────────────────────────────────────────────────────
 export default function App() {
   // Navigation flow: 'initial' | 'pre-test' | 'camera-check' | 'screen-check' | 'in-progress'
@@ -513,6 +522,15 @@ export default function App() {
   const [isEndingSession, setIsEndingSession] = useState(false);
   const [backendError, setBackendError] = useState('');
   const [pendingSessionId, setPendingSessionId] = useState('');
+
+  // Backend connection & periodic session check states (Commit 11)
+  const [backendStatus, setBackendStatus] = useState('checking'); // 'checking' | 'connected' | 'disconnected'
+  const [lastServerCheck, setLastServerCheck] = useState('');
+  const [isCheckingBackend, setIsCheckingBackend] = useState(false);
+
+  const sessionCheckIntervalRef = useRef(null);
+  const isCheckingBackendRef = useRef(false);
+  const endLocalAssessmentRef = useRef(null);
 
   // Active MediaStreams
   const [cameraStream, setCameraStream] = useState(null);
@@ -643,10 +661,72 @@ export default function App() {
     }
   }
 
+  /** Stop session check interval safely. */
+  function stopSessionCheck() {
+    if (sessionCheckIntervalRef.current) {
+      clearInterval(sessionCheckIntervalRef.current);
+      sessionCheckIntervalRef.current = null;
+    }
+  }
+
+  /** Safely ends the local assessment (Requirement 11) */
+  function endLocalAssessment(endedAt) {
+    stopTimer();
+    stopSessionCheck();
+    cleanupAllStreams();
+    setSession((prev) =>
+      prev ? { ...prev, status: 'completed', endedAt: endedAt || new Date().toISOString() } : null
+    );
+    setCameraStatus('not-checked');
+    setScreenStatus('not-checked');
+    setBackendError('');
+    setPendingSessionId('');
+    setFlow('initial');
+    setTimeout(() => setSession(null), 50);
+  }
+
+  endLocalAssessmentRef.current = endLocalAssessment;
+
+  /** Re-checks backend health and current session status upon manual retry (Requirement 8) */
+  async function handleRetryConnection() {
+    if (isCheckingBackendRef.current) return;
+    isCheckingBackendRef.current = true;
+    setIsCheckingBackend(true);
+    setBackendStatus('checking');
+
+    try {
+      // 1. Run backend health check (Requirement 1 & 8)
+      await getBackendHealth();
+
+      // 2. Query active session (Requirement 9 & 10)
+      if (session?.sessionId) {
+        const data = await getSession(session.sessionId);
+        if (data?.session?.status === 'completed') {
+          if (endLocalAssessmentRef.current) {
+            endLocalAssessmentRef.current(data.session?.endedAt);
+          }
+          return;
+        }
+      }
+
+      setBackendStatus('connected');
+      setLastServerCheck(formatCheckTime(new Date()));
+    } catch (err) {
+      console.warn('Backend retry connection failed:', err.message);
+      setBackendStatus('disconnected');
+    } finally {
+      isCheckingBackendRef.current = false;
+      setIsCheckingBackend(false);
+    }
+  }
+
   /** End the assessment: notify backend, stop timer, stop streams, go home. */
   async function handleEndTest() {
     if (isEndingSession) return;
     setIsEndingSession(true);
+
+    // Stop session check interval immediately (Requirement 13)
+    stopSessionCheck();
 
     // Notify backend: PATCH /api/sessions/:sessionId/end
     if (session?.sessionId) {
@@ -674,10 +754,87 @@ export default function App() {
     setTimeout(() => setSession(null), 50);
   }
 
-  // Clean up timer on unmount (prevents memory leaks / stale intervals)
+  // Clean up timer and intervals on unmount (prevents memory leaks / stale intervals)
   useEffect(() => {
-    return () => stopTimer();
+    return () => {
+      stopTimer();
+      stopSessionCheck();
+    };
   }, []);
+
+  // ── Periodic 10-second Session Check & Initial Connection Check (Commit 11) ──
+  useEffect(() => {
+    // Only run when in active assessment with a valid sessionId
+    if (flow !== 'in-progress' || !session?.sessionId) {
+      stopSessionCheck();
+      return;
+    }
+
+    const currentSessionId = session.sessionId;
+
+    // 1. Connection check when the assessment screen opens (Requirements 4, 5, 6, 7)
+    // Non-blocking UI
+    setBackendStatus('checking');
+
+    async function runInitialCheck() {
+      if (isCheckingBackendRef.current) return;
+      isCheckingBackendRef.current = true;
+      setIsCheckingBackend(true);
+
+      try {
+        await getBackendHealth();
+        const data = await getSession(currentSessionId);
+        setBackendStatus('connected');
+        setLastServerCheck(formatCheckTime(new Date()));
+
+        if (data?.session?.status === 'completed') {
+          if (endLocalAssessmentRef.current) {
+            endLocalAssessmentRef.current(data.session?.endedAt);
+          }
+        }
+      } catch (err) {
+        console.warn('Initial backend connection check failed:', err.message);
+        setBackendStatus('disconnected');
+      } finally {
+        isCheckingBackendRef.current = false;
+        setIsCheckingBackend(false);
+      }
+    }
+
+    runInitialCheck();
+
+    // 2. Periodic 10-second session check (Requirements 9-13)
+    stopSessionCheck();
+
+    const intervalId = setInterval(async () => {
+      if (isCheckingBackendRef.current) return;
+      isCheckingBackendRef.current = true;
+
+      try {
+        const data = await getSession(currentSessionId);
+        setBackendStatus('connected');
+        setLastServerCheck(formatCheckTime(new Date()));
+
+        if (data?.session?.status === 'completed') {
+          if (endLocalAssessmentRef.current) {
+            endLocalAssessmentRef.current(data.session?.endedAt);
+          }
+        }
+      } catch (err) {
+        console.warn('Periodic session check failed:', err.message);
+        // Requirement 12: Do not immediately end assessment. Show Backend: Disconnected.
+        setBackendStatus('disconnected');
+      } finally {
+        isCheckingBackendRef.current = false;
+      }
+    }, 10000);
+
+    sessionCheckIntervalRef.current = intervalId;
+
+    return () => {
+      stopSessionCheck();
+    };
+  }, [flow, session?.sessionId]);
 
   // Determine current active progress step (Requirement 10)
   function getActiveStep() {
@@ -936,11 +1093,26 @@ export default function App() {
 
           <hr className="heimdall-divider" />
 
-          {/* Device and Backend monitoring status (Requirement 5) */}
+          {/* Device and Backend monitoring status (Commit 11) */}
           <div className="session-devices-row">
-            <div className="session-device-pill">
-              <span className="device-pill-dot dot-green" />
-              <span>Backend: Connected</span>
+            <div
+              id="backend-status-pill"
+              className={`session-device-pill pill--${backendStatus}`}
+            >
+              <span
+                className={`device-pill-dot dot-${
+                  backendStatus === 'connected'
+                    ? 'green'
+                    : backendStatus === 'checking'
+                    ? 'amber'
+                    : 'red'
+                }`}
+              />
+              <span>
+                Backend: {backendStatus === 'connected' && 'Connected'}
+                {backendStatus === 'checking' && 'Checking...'}
+                {backendStatus === 'disconnected' && 'Disconnected'}
+              </span>
             </div>
             <div className="session-device-pill">
               <span className="device-pill-dot dot-green" />
@@ -951,6 +1123,33 @@ export default function App() {
               <span>Screen: Connected</span>
             </div>
           </div>
+
+          {/* Last server check timestamp (Requirement 14 & 15) */}
+          <div className="session-last-check-row">
+            <span id="last-server-check" className="last-check-text">
+              Last server check: {lastServerCheck || '--:--:--'}
+            </span>
+          </div>
+
+          {/* Backend Unavailable Warning Box & Retry (Requirements 8 & 16) */}
+          {backendStatus === 'disconnected' && (
+            <div className="session-server-warning-box" id="backend-lost-warning">
+              <div className="warning-content">
+                <span className="warning-icon">⚠️</span>
+                <span className="warning-message">
+                  Connection to the assessment server was lost. Retrying...
+                </span>
+              </div>
+              <button
+                id="retry-connection-btn"
+                className="btn-retry-action"
+                onClick={handleRetryConnection}
+                disabled={isCheckingBackend}
+              >
+                {isCheckingBackend ? 'Checking...' : 'Retry Connection'}
+              </button>
+            </div>
+          )}
 
           <hr className="heimdall-divider" />
 
