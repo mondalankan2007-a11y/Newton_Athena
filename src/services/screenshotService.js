@@ -1,21 +1,27 @@
 /**
  * Screenshot Capture Service
  *
- * Captures screenshot frames from an explicitly selected screen-sharing MediaStream.
+ * Captures screenshot frames from an explicitly selected screen-sharing MediaStream
+ * and compresses them into JPEG Blobs suitable for transmission or preview.
  *
  * Privacy & Performance Guarantees:
  * - Only uses the provided screen-sharing MediaStream (never requests new permissions).
  * - Never touches or captures the camera stream.
  * - Never stops the original screen MediaStream or any of its tracks.
  * - Cleans up all temporary video and canvas elements immediately.
- * - Produces a JPEG Blob at ~0.7 quality.
+ * - Compresses to JPEG Blob at ~0.65 quality (type: "image/jpeg").
+ * - Does NOT save permanent files to disk or keep historical blobs in memory.
  */
+
+// JPEG compression quality between 0.6 and 0.7
+const JPEG_COMPRESSION_QUALITY = 0.65;
 
 /**
  * Captures a single screenshot from the user's active screen-sharing stream.
+ * Converts the frame to a compressed JPEG Blob.
  *
  * @param {MediaStream} screenStream - The active screen MediaStream from getDisplayMedia()
- * @returns {Promise<Blob>} A promise that resolves with the JPEG Blob
+ * @returns {Promise<Blob>} A promise that resolves with the JPEG Blob (type: "image/jpeg")
  */
 export async function captureScreenshot(screenStream) {
   // 1. Validate MediaStream
@@ -109,26 +115,34 @@ export async function captureScreenshot(screenStream) {
     // 7. Draw the current screen frame onto the canvas
     ctx.drawImage(video, 0, 0, width, height);
 
-    // 8. Convert the canvas to a JPEG Blob (quality ~0.7)
+    // 8. Convert the canvas to a compressed JPEG Blob (quality 0.65)
     const blob = await new Promise((resolve, reject) => {
-      canvas.toBlob(
-        (resultBlob) => {
-          if (resultBlob) {
-            resolve(resultBlob);
-          } else {
-            reject(new Error('Canvas toBlob failed to produce a JPEG Blob.'));
-          }
-        },
-        'image/jpeg',
-        0.7
-      );
+      try {
+        canvas.toBlob(
+          (resultBlob) => {
+            if (resultBlob && resultBlob.type === 'image/jpeg') {
+              resolve(resultBlob);
+            } else if (resultBlob) {
+              // Ensure Blob has explicit type image/jpeg
+              const jpegBlob = resultBlob.slice(0, resultBlob.size, 'image/jpeg');
+              resolve(jpegBlob);
+            } else {
+              reject(new Error('Canvas toBlob returned null: failed to compress screenshot.'));
+            }
+          },
+          'image/jpeg',
+          JPEG_COMPRESSION_QUALITY
+        );
+      } catch (err) {
+        reject(err);
+      }
     });
 
     // Clean up canvas dimensions to free memory
     canvas.width = 0;
     canvas.height = 0;
 
-    // 9. Return the Blob
+    // 9. Return the JPEG Blob
     return blob;
   } finally {
     // 10. Clean up the temporary video element
@@ -142,4 +156,44 @@ export async function captureScreenshot(screenStream) {
     } catch (_) {}
     video.remove();
   }
+}
+
+/**
+ * Calculates screenshot size in bytes and kilobytes from a Blob.
+ *
+ * @param {Blob} blob - The captured screenshot Blob
+ * @returns {{ bytes: number, kilobytes: number }}
+ */
+export function getScreenshotSize(blob) {
+  if (!blob || typeof blob.size !== 'number') {
+    return { bytes: 0, kilobytes: 0 };
+  }
+  const bytes = blob.size;
+  const kilobytes = Number((bytes / 1024).toFixed(2));
+  return { bytes, kilobytes };
+}
+
+/**
+ * Formats a byte count into a user-readable string (e.g. "125 KB", "1.24 MB").
+ *
+ * @param {number} bytes - Number of bytes
+ * @returns {string} Formatted size string
+ */
+export function formatFileSize(bytes) {
+  if (typeof bytes !== 'number' || isNaN(bytes) || bytes <= 0) {
+    return '0 KB';
+  }
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  const kb = bytes / 1024;
+  if (kb < 1024) {
+    return `${Math.round(kb)} KB`;
+  }
+  const mb = kb / 1024;
+  if (mb < 1024) {
+    return `${parseFloat(mb.toFixed(2))} MB`;
+  }
+  const gb = mb / 1024;
+  return `${parseFloat(gb.toFixed(2))} GB`;
 }

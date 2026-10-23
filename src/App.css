@@ -1217,7 +1217,7 @@ body {
   background: #141720;
   border: 1px solid #1f2533;
   border-radius: 8px;
-  padding: 10px 14px;
+  padding: 8px 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1237,7 +1237,7 @@ body {
 }
 
 .metric-box-value.count-value {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   color: #38bdf8;
   font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
@@ -1247,6 +1247,18 @@ body {
   font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
   font-size: 13px;
   color: #a7f3d0;
+}
+
+.metric-box-value.size-value {
+  font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+  font-size: 13px;
+  color: #fcd34d;
+}
+
+.metric-box-value.data-value {
+  font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+  font-size: 13px;
+  color: #c084fc;
 }
 
 .screenshot-preview-container {

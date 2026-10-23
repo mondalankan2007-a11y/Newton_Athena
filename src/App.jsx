@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { createSession, endSession, getSession, getBackendHealth } from './services/api';
 import { startScreenshotCapture, stopScreenshotCapture } from './services/screenshotScheduler';
+import { formatFileSize } from './services/screenshotService';
 import './App.css';
 
 // ── Icons ───────────────────────────────────────────────────────────────────
@@ -540,10 +541,12 @@ export default function App() {
   const cameraStreamRef = useRef(null);
   const screenStreamRef = useRef(null);
 
-  // ── Screenshot Monitoring States (Commit 13) ─────────────────────────────
-  const [screenshotCount, setScreenshotCount] = useState(0);
+  // ── Screenshot Monitoring & Statistics States (Commit 13 & 14) ───────────
+  const [screenshotCount, setScreenshotCount] = useState(0); // totalScreenshots
   const [lastScreenshotTime, setLastScreenshotTime] = useState('');
   const [latestScreenshotUrl, setLatestScreenshotUrl] = useState(null);
+  const [latestScreenshotSize, setLatestScreenshotSize] = useState(0); // size in bytes
+  const [totalBytesCaptured, setTotalBytesCaptured] = useState(0); // running total bytes
   const [screenshotStatus, setScreenshotStatus] = useState('Inactive'); // 'Inactive' | 'Active' | 'Screenshot capture failed'
 
   const latestScreenshotUrlRef = useRef(null);
@@ -579,6 +582,8 @@ export default function App() {
     stopScreenshotCapture();
     clearScreenshotPreview();
     setScreenshotStatus('Inactive');
+    setLatestScreenshotSize(0);
+    setTotalBytesCaptured(0);
     setCameraStream(null);
     setScreenStream(null);
   }
@@ -668,6 +673,8 @@ export default function App() {
       setElapsed(0);
       setScreenshotCount(0);
       setLastScreenshotTime('');
+      setLatestScreenshotSize(0);
+      setTotalBytesCaptured(0);
       setScreenshotStatus('Active');
       clearScreenshotPreview();
       setFlow('in-progress');
@@ -868,7 +875,7 @@ export default function App() {
     };
   }, [flow, session?.sessionId]);
 
-  // ── Automatic 1-Second Screenshot Capture Loop (Commit 13) ────────────────
+  // ── Automatic 1-Second Screenshot Capture Loop (Commit 13 & 14) ───────────
   useEffect(() => {
     const isAssessmentActive = flow === 'in-progress' && session?.status === 'active';
     const isScreenLive = screenStream && screenStream.getVideoTracks().some((t) => t.readyState === 'live');
@@ -881,6 +888,10 @@ export default function App() {
         (blob) => {
           setScreenshotCount((prev) => prev + 1);
           setLastScreenshotTime(new Date().toLocaleTimeString());
+          if (blob && typeof blob.size === 'number') {
+            setLatestScreenshotSize(blob.size);
+            setTotalBytesCaptured((prev) => prev + blob.size);
+          }
           setScreenshotStatus('Active');
 
           const newUrl = URL.createObjectURL(blob);
@@ -901,6 +912,8 @@ export default function App() {
       if (!isAssessmentActive) {
         clearScreenshotPreview();
         setScreenshotStatus('Inactive');
+        setLatestScreenshotSize(0);
+        setTotalBytesCaptured(0);
       } else if (!isScreenLive) {
         setScreenshotStatus('Inactive');
       }
@@ -1277,6 +1290,18 @@ export default function App() {
                   <span className="metric-box-label">Last Screenshot</span>
                   <span className="metric-box-value time-value" id="screenshot-last-time">
                     {lastScreenshotTime || '--:--:--'}
+                  </span>
+                </div>
+                <div className="screenshot-metric-box">
+                  <span className="metric-box-label">Latest Screenshot Size</span>
+                  <span className="metric-box-value size-value" id="screenshot-latest-size">
+                    {latestScreenshotSize ? formatFileSize(latestScreenshotSize) : '--'}
+                  </span>
+                </div>
+                <div className="screenshot-metric-box">
+                  <span className="metric-box-label">Data Captured</span>
+                  <span className="metric-box-value data-value" id="screenshot-total-data">
+                    {formatFileSize(totalBytesCaptured)}
                   </span>
                 </div>
               </div>

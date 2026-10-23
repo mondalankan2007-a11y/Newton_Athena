@@ -217,6 +217,14 @@ During an active assessment session, the application automatically captures the 
   - Previous object URLs are revoked upon each new frame and on teardown, preventing memory leaks and avoiding permanent disk storage.
   - Backend screenshot upload and storage will be implemented in a later commit.
 
+### Screenshot Data Handling
+
+- **Capture Cadence**: Screenshots are captured once every second (1000 milliseconds) from the candidate's active screen-sharing stream.
+- **JPEG Conversion & Compression**: Each frame is rendered onto an off-screen canvas and converted via `canvas.toBlob()` to a compressed JPEG Blob (quality ~0.65, type `image/jpeg`).
+- **Compression Before Future Upload**: Compressing each frame to JPEG dramatically minimizes byte size (~100 KB–200 KB per frame depending on resolution), making it optimized for backend upload in future commits.
+- **In-Memory Tracking Only**: The application tracks live byte counts (`latestScreenshotSize`, `totalBytesCaptured`) and displays human-readable values (`128 KB`, `15.2 MB`) without storing an array of blobs.
+- **No Disk or Backend Storage**: Screenshots are kept strictly in transient memory for live preview; old object URLs are revoked on every tick, and no files are written to disk. Backend upload endpoints are not yet implemented in this commit.
+
 ## Building for Production
 
 ```bash
