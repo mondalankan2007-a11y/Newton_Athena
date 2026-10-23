@@ -14,6 +14,7 @@ app.use(express.json());
 // ── Routes ───────────────────────────────────────────────────────────────────
 
 const sessionsRouter = require('./routes/sessions');
+const screenshotRouter = require('./routes/screenshotRoutes');
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -33,6 +34,9 @@ app.get('/api', (req, res) => {
 
 // Session management endpoints
 app.use('/api/sessions', sessionsRouter);
+
+// Screenshot upload and monitoring endpoints
+app.use('/api/sessions', screenshotRouter);
 
 // ── 404 Catch-All Handler ───────────────────────────────────────────────────
 app.use((req, res) => {

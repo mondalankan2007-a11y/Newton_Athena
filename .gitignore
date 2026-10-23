@@ -18,3 +18,8 @@ Thumbs.db
 # Env files
 .env
 .env.local
+
+# Uploaded screenshots
+backend/uploads/screenshots/*
+!backend/uploads/screenshots/.gitkeep
+

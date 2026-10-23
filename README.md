@@ -19,7 +19,12 @@ A desktop application for monitored online assessments, built with Electron, Rea
 ```
 Newton_Athena/
 ├── backend/
-│   └── server.js      # Express API server (port 3001)
+│   ├── routes/
+│   │   ├── sessions.js          # Assessment session lifecycle endpoints
+│   │   └── screenshotRoutes.js  # Screenshot upload & metadata endpoints
+│   ├── uploads/
+│   │   └── screenshots/         # Per-session screenshot storage (git-ignored)
+│   └── server.js                # Express API server (port 3001)
 ├── electron/
 │   ├── main.js        # Electron main process
 │   └── preload.js     # Context bridge (secure IPC)
@@ -138,6 +143,64 @@ Runs the standalone Express backend server:
       "startedAt": "2026-10-21T06:29:55.647Z",
       "endedAt": "2026-10-21T06:30:15.123Z"
     }
+  }
+  ```
+
+### Screenshot Upload API Reference (Commit 15)
+
+Screenshots captured during an active assessment are received and stored locally on the backend per session under `backend/uploads/screenshots/<sessionId>/`. Frontend automatic upload integration will be added in a later commit.
+
+#### 1. Upload Screenshot
+- **Endpoint**: `POST /api/sessions/:sessionId/screenshots`
+- **Content-Type**: `multipart/form-data`
+- **Field Name**: `screenshot` (file, JPEG only)
+- **Constraints**:
+  - Validates `sessionId` against active in-memory session store (returns `404` if not found).
+  - Strictly requires `image/jpeg` format (returns `400` for other MIME types).
+  - Maximum file size: `2 MB` (returns `413 Payload Too Large` if exceeded).
+  - Generates safe sequential filenames (e.g. `screenshot-000001.jpg`).
+- **Response (HTTP 201 Created)**:
+  ```json
+  {
+    "success": true,
+    "screenshot": {
+      "id": 1,
+      "sessionId": "NA-A1B2C3",
+      "filename": "screenshot-000001.jpg",
+      "timestamp": "2026-10-23T18:00:00.000Z",
+      "size": 145231,
+      "mimeType": "image/jpeg"
+    }
+  }
+  ```
+
+#### 2. Get Screenshots Metadata
+- **Endpoint**: `GET /api/sessions/:sessionId/screenshots`
+- **Response (HTTP 200 OK)**:
+  ```json
+  {
+    "sessionId": "NA-A1B2C3",
+    "count": 3,
+    "screenshots": [
+      {
+        "id": 1,
+        "filename": "screenshot-000001.jpg",
+        "timestamp": "2026-10-23T18:00:00.000Z",
+        "size": 145231,
+        "mimeType": "image/jpeg"
+      }
+    ]
+  }
+  ```
+
+#### 3. Get Screenshot Statistics
+- **Endpoint**: `GET /api/sessions/:sessionId/screenshots/stats`
+- **Response (HTTP 200 OK)**:
+  ```json
+  {
+    "sessionId": "NA-A1B2C3",
+    "count": 120,
+    "totalBytes": 15432123
   }
   ```
 
