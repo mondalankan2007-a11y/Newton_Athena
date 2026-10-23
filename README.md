@@ -24,12 +24,16 @@ Newton_Athena/
 │   ├── main.js        # Electron main process
 │   └── preload.js     # Context bridge (secure IPC)
 ├── src/
-│   ├── main.jsx       # React entry point
-│   ├── App.jsx        # Homepage & assessment flow component
-│   ├── App.css        # Application styles
-│   └── index.css      # Global styles / reset
-├── index.html         # Vite HTML entry
-├── vite.config.js     # Vite configuration
+│   ├── main.jsx                 # React entry point
+│   ├── App.jsx                  # Homepage & assessment flow component
+│   ├── App.css                  # Application styles
+│   ├── index.css                # Global styles / reset
+│   └── services/
+│       ├── api.js               # REST client for backend session & health
+│       ├── screenshotService.js # Screen frame extraction & canvas-to-JPEG conversion
+│       └── screenshotScheduler.js # 1-second capture loop with overlap protection
+├── index.html                   # Vite HTML entry
+├── vite.config.js               # Vite configuration
 ├── package.json
 └── README.md
 ```
@@ -193,6 +197,25 @@ While an assessment is actively running (`flow === 'in-progress'`), the frontend
      - The component unmounts
      - The `sessionId` changes
    - Prevents duplicate intervals or lingering network requests when navigating between screens.
+
+## Screenshot Monitoring
+
+During an active assessment session, the application automatically captures the candidate's screen to verify testing integrity:
+
+- **1-Second Capture Cadence**: The application captures the user's explicitly selected screen-sharing stream (`getDisplayMedia()`) once every second (1000 milliseconds) throughout the active assessment session.
+- **Strict Privacy Guarantees**:
+  - Only the user's explicitly selected screen-sharing `MediaStream` is captured.
+  - Camera streams and unshared screens/windows are never captured.
+  - No background or hidden screen capture is performed without user consent.
+  - Does not call `getDisplayMedia()` again or alter the existing screen track.
+  - Screen capture halts immediately if screen sharing is stopped by the candidate or system.
+  - Screen capture stops completely when the assessment ends or when navigating away.
+- **Overlap Prevention**: If a capture operation takes longer than 1000 milliseconds (e.g. under heavy system load), concurrent captures are prevented from piling up; subsequent cycles continue normally once the active capture finishes.
+- **Local Testing & Memory Management**:
+  - Screenshots are currently kept locally in memory for testing and real-time preview.
+  - The UI maintains a real-time monitor displaying status (`Active`), capture rate (`1 screenshot / second`), total screenshots captured, last capture timestamp, and a live preview.
+  - Previous object URLs are revoked upon each new frame and on teardown, preventing memory leaks and avoiding permanent disk storage.
+  - Backend screenshot upload and storage will be implemented in a later commit.
 
 ## Building for Production
 

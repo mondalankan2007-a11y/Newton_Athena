@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { createSession, endSession, getSession, getBackendHealth } from './services/api';
+import { startScreenshotCapture, stopScreenshotCapture } from './services/screenshotScheduler';
 import './App.css';
 
 // ── Icons ───────────────────────────────────────────────────────────────────
@@ -539,6 +540,23 @@ export default function App() {
   const cameraStreamRef = useRef(null);
   const screenStreamRef = useRef(null);
 
+  // ── Screenshot Monitoring States (Commit 13) ─────────────────────────────
+  const [screenshotCount, setScreenshotCount] = useState(0);
+  const [lastScreenshotTime, setLastScreenshotTime] = useState('');
+  const [latestScreenshotUrl, setLatestScreenshotUrl] = useState(null);
+  const [screenshotStatus, setScreenshotStatus] = useState('Inactive'); // 'Inactive' | 'Active' | 'Screenshot capture failed'
+
+  const latestScreenshotUrlRef = useRef(null);
+
+  /** Safely revokes and resets the latest screenshot object URL */
+  function clearScreenshotPreview() {
+    if (latestScreenshotUrlRef.current) {
+      URL.revokeObjectURL(latestScreenshotUrlRef.current);
+      latestScreenshotUrlRef.current = null;
+    }
+    setLatestScreenshotUrl(null);
+  }
+
   // Sync refs with states
   useEffect(() => {
     cameraStreamRef.current = cameraStream;
@@ -558,6 +576,9 @@ export default function App() {
       screenStreamRef.current.getTracks().forEach((track) => track.stop());
       screenStreamRef.current = null;
     }
+    stopScreenshotCapture();
+    clearScreenshotPreview();
+    setScreenshotStatus('Inactive');
     setCameraStream(null);
     setScreenStream(null);
   }
@@ -566,6 +587,10 @@ export default function App() {
   useEffect(() => {
     return () => {
       cleanupAllStreams();
+      stopTimer();
+      stopSessionCheck();
+      stopScreenshotCapture();
+      clearScreenshotPreview();
     };
   }, []);
 
@@ -585,6 +610,9 @@ export default function App() {
     const track = stream.getVideoTracks()[0];
     if (track) {
       track.onended = () => {
+        stopScreenshotCapture();
+        clearScreenshotPreview();
+        setScreenshotStatus('Inactive');
         setScreenStatus('disconnected');
         setScreenStream(null);
         screenStreamRef.current = null;
@@ -638,6 +666,10 @@ export default function App() {
       setSession(backendSession);
       setPendingSessionId('');
       setElapsed(0);
+      setScreenshotCount(0);
+      setLastScreenshotTime('');
+      setScreenshotStatus('Active');
+      clearScreenshotPreview();
       setFlow('in-progress');
 
       // Start timer — one interval only
@@ -835,6 +867,49 @@ export default function App() {
       stopSessionCheck();
     };
   }, [flow, session?.sessionId]);
+
+  // ── Automatic 1-Second Screenshot Capture Loop (Commit 13) ────────────────
+  useEffect(() => {
+    const isAssessmentActive = flow === 'in-progress' && session?.status === 'active';
+    const isScreenLive = screenStream && screenStream.getVideoTracks().some((t) => t.readyState === 'live');
+
+    if (isAssessmentActive && isScreenLive) {
+      setScreenshotStatus('Active');
+
+      startScreenshotCapture(
+        screenStream,
+        (blob) => {
+          setScreenshotCount((prev) => prev + 1);
+          setLastScreenshotTime(new Date().toLocaleTimeString());
+          setScreenshotStatus('Active');
+
+          const newUrl = URL.createObjectURL(blob);
+          // Revoke the previous object URL before replacing it
+          if (latestScreenshotUrlRef.current) {
+            URL.revokeObjectURL(latestScreenshotUrlRef.current);
+          }
+          latestScreenshotUrlRef.current = newUrl;
+          setLatestScreenshotUrl(newUrl);
+        },
+        (err) => {
+          console.warn('Screenshot capture failed:', err?.message);
+          setScreenshotStatus('Screenshot capture failed');
+        }
+      );
+    } else {
+      stopScreenshotCapture();
+      if (!isAssessmentActive) {
+        clearScreenshotPreview();
+        setScreenshotStatus('Inactive');
+      } else if (!isScreenLive) {
+        setScreenshotStatus('Inactive');
+      }
+    }
+
+    return () => {
+      stopScreenshotCapture();
+    };
+  }, [flow, session?.status, screenStream]);
 
   // Determine current active progress step (Requirement 10)
   function getActiveStep() {
@@ -1150,6 +1225,86 @@ export default function App() {
               </button>
             </div>
           )}
+
+          <hr className="heimdall-divider" />
+
+          {/* ── Screenshot Monitoring Section (Commit 13) ── */}
+          <div className="screenshot-monitor-section" id="screenshot-monitoring-section">
+            <div className="screenshot-monitor-header">
+              <div className="screenshot-monitor-title-group">
+                <span className="screenshot-monitor-badge">SCREEN CAPTURE</span>
+                <h3 className="screenshot-monitor-heading">Screenshot Monitoring</h3>
+              </div>
+              <div
+                id="screenshot-status-pill"
+                className={`session-device-pill ${
+                  screenshotStatus === 'Active'
+                    ? ''
+                    : screenshotStatus === 'Screenshot capture failed'
+                    ? 'pill--disconnected'
+                    : 'pill--checking'
+                }`}
+              >
+                <span
+                  className={`device-pill-dot ${
+                    screenshotStatus === 'Active'
+                      ? 'dot-green'
+                      : screenshotStatus === 'Screenshot capture failed'
+                      ? 'dot-red'
+                      : 'dot-amber'
+                  }`}
+                />
+                <span id="screenshot-status-text">Status: {screenshotStatus}</span>
+              </div>
+            </div>
+
+            <div className="screenshot-monitor-body">
+              {/* Monitoring metrics */}
+              <div className="screenshot-metrics-grid">
+                <div className="screenshot-metric-box">
+                  <span className="metric-box-label">Capture Rate</span>
+                  <span className="metric-box-value" id="screenshot-capture-rate">
+                    1 screenshot / second
+                  </span>
+                </div>
+                <div className="screenshot-metric-box">
+                  <span className="metric-box-label">Screenshots Captured</span>
+                  <span className="metric-box-value count-value" id="screenshot-count-display">
+                    {screenshotCount}
+                  </span>
+                </div>
+                <div className="screenshot-metric-box">
+                  <span className="metric-box-label">Last Screenshot</span>
+                  <span className="metric-box-value time-value" id="screenshot-last-time">
+                    {lastScreenshotTime || '--:--:--'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Latest Screenshot Preview */}
+              <div className="screenshot-preview-container">
+                <div className="screenshot-preview-topbar">
+                  <span className="preview-topbar-label">Latest Capture Preview</span>
+                  <span className="preview-topbar-tag">1 FPS</span>
+                </div>
+                <div className="screenshot-preview-display">
+                  {latestScreenshotUrl ? (
+                    <img
+                      id="screenshot-preview-img"
+                      src={latestScreenshotUrl}
+                      alt="Latest Screen Capture Preview"
+                      className="screenshot-preview-image"
+                    />
+                  ) : (
+                    <div className="screenshot-preview-placeholder">
+                      <div className="mini-spinner" />
+                      <span>Capturing first frame...</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
 
           <hr className="heimdall-divider" />
 
