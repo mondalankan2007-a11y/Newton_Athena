@@ -319,6 +319,22 @@ Backend stores screenshot locally
 - **Cancellation on Teardown**: Ending the assessment (`End Test`) or stopping screen sharing immediately cancels any pending retry timers or in-flight requests via `AbortController`. No screenshot uploads continue after termination.
 - **UI Transparency**: Real-time retry attempts (`Retry: X / 3`), retried counts, failed counts, and error notices are presented directly in the Screenshot Monitoring panel.
 
+### Screenshot Metadata
+
+Every screenshot captured and transmitted contains rich, validated metadata:
+
+- **Session ID (`sessionId`)**: The authoritative identifier of the assessment session. Must match the URL endpoint session ID.
+- **Sequence Number (`sequence`)**: A strictly increasing positive integer starting at `1` for a new assessment session (`1, 2, 3...`). Re-attempts on retry preserve the original sequence number.
+- **Capture Timestamp (`capturedAt`)**: ISO 8601 timestamp generated on the candidate's Electron client when the frame was captured. Retries preserve this original capture timestamp.
+- **Server Receive Timestamp (`receivedAt`)**: ISO 8601 timestamp generated on the backend server upon receiving the upload. Intentionally distinct from `capturedAt` to measure network latency and transmission delays.
+- **File Size (`size`)**: Actual size of the compressed JPEG Blob in bytes.
+- **MIME Type (`mimeType`)**: Verified format (`image/jpeg`). The uploaded binary and metadata must agree.
+
+#### Extended API Responses
+
+- `GET /api/sessions/:sessionId/screenshots`: Returns all metadata records with `id`, `sequence`, `filename`, `capturedAt`, `receivedAt`, `size`, and `mimeType`.
+- `GET /api/sessions/:sessionId/screenshots/stats`: Returns `sessionId`, `count`, `totalBytes`, `firstCapturedAt`, and `lastCapturedAt`.
+
 ## Building for Production
 
 ```bash

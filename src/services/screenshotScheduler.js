@@ -83,6 +83,7 @@ async function captureTick() {
         sequence: sequenceCounter,
         capturedAt: new Date().toISOString(),
         size: blob ? blob.size : 0,
+        mimeType: blob?.type || 'image/jpeg',
       };
       screenshotCallback(blob, metadata);
     }

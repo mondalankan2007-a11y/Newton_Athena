@@ -77,7 +77,7 @@ export async function uploadScreenshotWithRetry(sessionId, screenshotBlob, metad
     }
 
     try {
-      const result = await uploadScreenshot(sessionId, screenshotBlob);
+      const result = await uploadScreenshot(sessionId, screenshotBlob, metadata);
       return result;
     } catch (err) {
       lastError = err;

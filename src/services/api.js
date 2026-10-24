@@ -138,12 +138,13 @@ export async function getSession(sessionId) {
 }
 
 /**
- * Uploads a JPEG screenshot Blob to the backend for an active session.
+ * Uploads a JPEG screenshot Blob along with metadata to the backend for an active session.
  * @param {string} sessionId
  * @param {Blob} screenshotBlob
+ * @param {object} [metadata]
  * @returns {Promise<{ success: boolean, screenshot: object }>}
  */
-export async function uploadScreenshot(sessionId, screenshotBlob) {
+export async function uploadScreenshot(sessionId, screenshotBlob, metadata = {}) {
   if (!sessionId || typeof sessionId !== 'string' || !sessionId.trim()) {
     throw new Error('A valid sessionId is required to upload a screenshot.');
   }
@@ -154,6 +155,21 @@ export async function uploadScreenshot(sessionId, screenshotBlob) {
 
   const formData = new FormData();
   formData.append('screenshot', screenshotBlob, 'screenshot.jpg');
+
+  // Metadata fields (Commit 19)
+  formData.append('sessionId', metadata.sessionId || sessionId.trim());
+  if (metadata.sequence !== undefined && metadata.sequence !== null) {
+    formData.append('sequence', String(metadata.sequence));
+  }
+  if (metadata.capturedAt) {
+    formData.append('capturedAt', String(metadata.capturedAt));
+  }
+  if (metadata.size !== undefined && metadata.size !== null) {
+    formData.append('size', String(metadata.size));
+  }
+  if (metadata.mimeType) {
+    formData.append('mimeType', String(metadata.mimeType));
+  }
 
   try {
     const response = await fetch(

@@ -122,20 +122,91 @@ function handleUpload(req, res, next) {
 }
 
 // ── 1. POST /api/sessions/:sessionId/screenshots ─────────────────────────────
-// Uploads and stores a new JPEG screenshot for an active session
+// Uploads and stores a new JPEG screenshot for an active session with validated metadata
 router.post('/:sessionId/screenshots', validateSession, handleUpload, (req, res) => {
+  const cleanupFile = () => {
+    if (req.file && req.file.path && fs.existsSync(req.file.path)) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (_) {}
+    }
+  };
+
   try {
     const { sessionId } = req.params;
+    const body = req.body || {};
+
+    // 1. Validate sessionId matches req.params.sessionId (Requirement 3)
+    if (body.sessionId !== undefined && body.sessionId !== null) {
+      if (typeof body.sessionId !== 'string' || body.sessionId.trim() !== sessionId) {
+        cleanupFile();
+        return res.status(400).json({
+          error: 'Session ID mismatch'
+        });
+      }
+    }
+
+    // 2. Validate sequence number: positive integer (Requirement 4)
+    if (body.sequence === undefined || body.sequence === null || body.sequence === '') {
+      cleanupFile();
+      return res.status(400).json({
+        error: 'Sequence number is required and must be a positive integer'
+      });
+    }
+
+    const sequenceNum = Number(body.sequence);
+    if (!Number.isInteger(sequenceNum) || sequenceNum <= 0) {
+      cleanupFile();
+      return res.status(400).json({
+        error: 'Invalid sequence: must be a positive integer greater than 0'
+      });
+    }
+
+    // 3. Validate capturedAt timestamp: valid ISO timestamp (Requirement 5)
+    if (!body.capturedAt || typeof body.capturedAt !== 'string') {
+      cleanupFile();
+      return res.status(400).json({
+        error: 'capturedAt is required and must be a valid ISO timestamp'
+      });
+    }
+
+    const parsedDate = new Date(body.capturedAt);
+    if (isNaN(parsedDate.getTime()) || !body.capturedAt.includes('T')) {
+      cleanupFile();
+      return res.status(400).json({
+        error: 'Invalid capturedAt timestamp format. Must be a valid ISO 8601 string'
+      });
+    }
+
+    // 4. Validate MIME type: must be image/jpeg and match uploaded file (Requirement 6)
+    if (body.mimeType && body.mimeType !== 'image/jpeg') {
+      cleanupFile();
+      return res.status(400).json({
+        error: 'Invalid MIME type in metadata: only image/jpeg is allowed'
+      });
+    }
+
+    if (req.file.mimetype !== 'image/jpeg') {
+      cleanupFile();
+      return res.status(400).json({
+        error: 'Invalid file MIME type: only image/jpeg is allowed'
+      });
+    }
+
     const sessionList = screenshotMetadata.get(sessionId) || [];
     const nextId = sessionList.length + 1;
+    const receivedAt = new Date().toISOString();
 
+    // 5. Store metadata in memory (Requirement 7 & 8)
     const metadata = {
       id: nextId,
       sessionId,
+      sequence: sequenceNum,
+      capturedAt: body.capturedAt,
+      receivedAt,
       filename: req.file.filename,
-      timestamp: new Date().toISOString(),
       size: req.file.size,
-      mimeType: req.file.mimetype || 'image/jpeg'
+      mimeType: 'image/jpeg'
     };
 
     sessionList.push(metadata);
@@ -146,6 +217,7 @@ router.post('/:sessionId/screenshots', validateSession, handleUpload, (req, res)
       screenshot: metadata
     });
   } catch (err) {
+    cleanupFile();
     console.error('Error storing screenshot metadata:', err);
     return res.status(500).json({
       error: 'Internal server error while saving screenshot'
@@ -154,17 +226,22 @@ router.post('/:sessionId/screenshots', validateSession, handleUpload, (req, res)
 });
 
 // ── 2. GET /api/sessions/:sessionId/screenshots/stats ─────────────────────────
-// Returns aggregate screenshot count and total byte size for a session
+// Returns aggregate screenshot count, total bytes, firstCapturedAt, and lastCapturedAt
 router.get('/:sessionId/screenshots/stats', validateSession, (req, res) => {
   try {
     const { sessionId } = req.params;
     const screenshots = screenshotMetadata.get(sessionId) || [];
     const totalBytes = screenshots.reduce((sum, item) => sum + (item.size || 0), 0);
 
+    const firstCapturedAt = screenshots.length > 0 ? screenshots[0].capturedAt : null;
+    const lastCapturedAt = screenshots.length > 0 ? screenshots[screenshots.length - 1].capturedAt : null;
+
     return res.status(200).json({
       sessionId,
       count: screenshots.length,
-      totalBytes
+      totalBytes,
+      firstCapturedAt,
+      lastCapturedAt
     });
   } catch (err) {
     console.error('Error fetching screenshot stats:', err);
@@ -175,7 +252,7 @@ router.get('/:sessionId/screenshots/stats', validateSession, (req, res) => {
 });
 
 // ── 3. GET /api/sessions/:sessionId/screenshots ───────────────────────────────
-// Returns list of all screenshot metadata records for a session
+// Returns list of all screenshot metadata records for a session (without binary images)
 router.get('/:sessionId/screenshots', validateSession, (req, res) => {
   try {
     const { sessionId } = req.params;

@@ -1037,8 +1037,17 @@ export default function App() {
             return;
           }
 
+          // Full screenshot metadata (Commit 19)
+          const screenshotMetadata = {
+            sessionId: currentSessionId,
+            sequence: seq,
+            capturedAt: metadata?.capturedAt || new Date().toISOString(),
+            size: blob ? blob.size : 0,
+            mimeType: blob?.type || 'image/jpeg',
+          };
+
           // 4. Dispatch upload with single-upload + newest pending queue logic
-          processUpload(blob, currentSessionId, metadata);
+          processUpload(blob, currentSessionId, screenshotMetadata);
         },
         (err) => {
           if (!isMountedRef.current) return;
@@ -1435,15 +1444,39 @@ export default function App() {
                   </span>
                 </div>
                 <div className="screenshot-metric-box">
-                  <span className="metric-box-label">Captured</span>
+                  <span className="metric-box-label">Screenshots Captured</span>
                   <span className="metric-box-value count-value" id="screenshot-count-display">
                     {screenshotCount}
                   </span>
                 </div>
                 <div className="screenshot-metric-box">
-                  <span className="metric-box-label">Uploaded</span>
+                  <span className="metric-box-label">Screenshots Uploaded</span>
                   <span className="metric-box-value uploaded-count-value" id="screenshot-uploaded-count">
                     {uploadedScreenshotCount}
+                  </span>
+                </div>
+                <div className="screenshot-metric-box">
+                  <span className="metric-box-label">Latest Sequence</span>
+                  <span className="metric-box-value sequence-value" id="screenshot-latest-sequence">
+                    {screenshotSequence > 0 ? `#${screenshotSequence}` : '--'}
+                  </span>
+                </div>
+                <div className="screenshot-metric-box">
+                  <span className="metric-box-label">Latest Screenshot</span>
+                  <span className="metric-box-value size-value" id="screenshot-latest-size">
+                    {latestScreenshotSize ? formatFileSize(latestScreenshotSize) : '--'}
+                  </span>
+                </div>
+                <div className="screenshot-metric-box">
+                  <span className="metric-box-label">Captured At</span>
+                  <span className="metric-box-value time-value" id="screenshot-last-time">
+                    {lastScreenshotTime || '--:--:--'}
+                  </span>
+                </div>
+                <div className="screenshot-metric-box">
+                  <span className="metric-box-label">Last Upload</span>
+                  <span className="metric-box-value time-value" id="screenshot-last-upload-time">
+                    {lastUploadTime || '--:--:--'}
                   </span>
                 </div>
                 <div className="screenshot-metric-box">
@@ -1456,18 +1489,6 @@ export default function App() {
                   <span className="metric-box-label">Failed</span>
                   <span className="metric-box-value failed-stat-value" id="screenshot-failed-count">
                     {failedScreenshotCount}
-                  </span>
-                </div>
-                <div className="screenshot-metric-box">
-                  <span className="metric-box-label">Last Capture</span>
-                  <span className="metric-box-value time-value" id="screenshot-last-time">
-                    {lastScreenshotTime || '--:--:--'}
-                  </span>
-                </div>
-                <div className="screenshot-metric-box">
-                  <span className="metric-box-label">Last Upload</span>
-                  <span className="metric-box-value time-value" id="screenshot-last-upload-time">
-                    {lastUploadTime || '--:--:--'}
                   </span>
                 </div>
                 <div className="screenshot-metric-box">
@@ -1509,12 +1530,6 @@ export default function App() {
                     </span>
                   </div>
                 )}
-                <div className="screenshot-metric-box">
-                  <span className="metric-box-label">Latest Screenshot Size</span>
-                  <span className="metric-box-value size-value" id="screenshot-latest-size">
-                    {latestScreenshotSize ? formatFileSize(latestScreenshotSize) : '--'}
-                  </span>
-                </div>
                 <div className="screenshot-metric-box">
                   <span className="metric-box-label">Data Captured</span>
                   <span className="metric-box-value data-value" id="screenshot-total-data">

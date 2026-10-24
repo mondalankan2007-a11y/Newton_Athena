@@ -1243,6 +1243,13 @@ body {
   font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
 }
 
+.metric-box-value.sequence-value {
+  font-size: 15px;
+  font-weight: 700;
+  color: #a78bfa;
+  font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+}
+
 .metric-box-value.uploaded-count-value {
   font-size: 15px;
   font-weight: 700;
