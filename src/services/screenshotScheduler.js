@@ -4,13 +4,13 @@
  * Manages an automatic screenshot loop that captures a frame from the user's
  * screen-sharing stream every 1000 milliseconds (1 FPS).
  *
- * Features:
- * - Immediate initial capture on start.
- * - Exact 1000ms recurring interval.
- * - Prevents overlapping captures (if capture takes longer than 1000ms, skips concurrent run).
- * - Safe multiple-call stop function.
- * - Stops immediately if screen stream ends.
- * - Completely independent from the 10-second backend session polling interval.
+ * Reliability Features (Commit 17):
+ * - Exactly 1000ms recurring interval.
+ * - Single-instance guarantee: startScreenshotCapture guards against duplicate timers.
+ * - Overlap protection: skips concurrent capture if a frame is already being converted.
+ * - Sequence tracking: increments monotonically (1, 2, 3...) per successful capture.
+ * - Sequence reset helper: resets to 0 only when a new assessment session begins.
+ * - Immediate clean teardown on stop or stream end.
  */
 
 import { captureScreenshot } from './screenshotService.js';
@@ -21,6 +21,22 @@ let isSchedulerRunning = false;
 let activeScreenStream = null;
 let screenshotCallback = null;
 let errorCallback = null;
+let sequenceCounter = 0;
+
+/**
+ * Resets the sequence counter to 0 (called when a new session starts).
+ */
+export function resetScreenshotSequence() {
+  sequenceCounter = 0;
+}
+
+/**
+ * Gets the current sequence counter value.
+ * @returns {number}
+ */
+export function getScreenshotSequence() {
+  return sequenceCounter;
+}
 
 /**
  * Checks if the given stream has an active, live video track.
@@ -43,7 +59,6 @@ async function captureTick() {
 
   // Prevent overlapping captures
   if (isCapturingInProgress) {
-    // Previous capture is still in flight; wait for it and skip this cycle
     return;
   }
 
@@ -61,9 +76,15 @@ async function captureTick() {
   try {
     const blob = await captureScreenshot(activeScreenStream);
 
-    // Only deliver callback if scheduler is still running
+    // Only deliver if scheduler is still running
     if (isSchedulerRunning && typeof screenshotCallback === 'function') {
-      screenshotCallback(blob);
+      sequenceCounter += 1;
+      const metadata = {
+        sequence: sequenceCounter,
+        capturedAt: new Date().toISOString(),
+        size: blob ? blob.size : 0,
+      };
+      screenshotCallback(blob, metadata);
     }
   } catch (err) {
     if (isSchedulerRunning && typeof errorCallback === 'function') {
@@ -81,21 +102,31 @@ async function captureTick() {
 
 /**
  * Starts automatic screenshot capture every 1000 milliseconds.
+ * Prevents duplicate timers: if already running with the same stream, avoids creating a new timer.
+ * If restarting with a new stream, stops the old timer first.
  *
  * @param {MediaStream} screenStream - Explicitly selected screen-sharing MediaStream
- * @param {Function} onScreenshot - Callback receiving each captured JPEG Blob: (blob) => void
+ * @param {Function} onScreenshot - Callback receiving each captured JPEG Blob and metadata: (blob, metadata) => void
  * @param {Function} [onError] - Optional callback receiving any capture errors: (error) => void
  */
 export function startScreenshotCapture(screenStream, onScreenshot, onError) {
-  // Clear any existing scheduler state first
-  stopScreenshotCapture();
-
   if (!isStreamTrackLive(screenStream)) {
     if (typeof onError === 'function') {
       onError(new Error('Cannot start capture: screen stream is missing or has ended.'));
     }
     return;
   }
+
+  // If already running with the exact same stream, do nothing to prevent duplicate timers
+  if (isSchedulerRunning && activeScreenStream === screenStream && screenshotIntervalId) {
+    // Update callbacks if changed, but do not spawn another interval
+    screenshotCallback = onScreenshot;
+    errorCallback = onError;
+    return;
+  }
+
+  // Safely stop any existing timer before starting
+  stopScreenshotCapture();
 
   activeScreenStream = screenStream;
   screenshotCallback = onScreenshot;
@@ -106,12 +137,12 @@ export function startScreenshotCapture(screenStream, onScreenshot, onError) {
   // 1. Capture one screenshot immediately
   captureTick();
 
-  // 2. Schedule screenshot every 1000 milliseconds
+  // 2. Schedule screenshot every 1000 milliseconds (Strict requirement: 1000ms)
   screenshotIntervalId = setInterval(captureTick, 1000);
 }
 
 /**
- * Stops the screenshot interval, prevents future captures, and clears pending state.
+ * Stops the screenshot interval, prevents future captures, and clears active state.
  * Safe to call multiple times.
  */
 export function stopScreenshotCapture() {

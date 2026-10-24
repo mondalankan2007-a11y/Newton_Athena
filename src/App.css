@@ -1253,6 +1253,34 @@ body {
   gap: 6px;
 }
 
+.metric-box-value.failed-stat-value {
+  font-size: 15px;
+  font-weight: 700;
+  color: #f87171;
+  font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+}
+
+.screenshot-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-top: 10px;
+}
+
+.error-banner-icon {
+  font-size: 14px;
+}
+
+.error-banner-text {
+  font-size: 12px;
+  color: #fca5a5;
+  font-weight: 500;
+}
+
 .failed-count-tag {
   font-size: 11px;
   font-weight: 500;

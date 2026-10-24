@@ -299,6 +299,15 @@ Backend stores screenshot locally
 - **Resilience to Failure**: Upload failures (network disconnection, server reboot, temporary HTTP errors) currently do not stop or invalidate the active assessment. The frontend records the failed upload count, flags the upload status (e.g. `Upload Status: Backend unavailable`), and continues capturing and attempting subsequent uploads without crashing.
 - **Teardown**: When the assessment ends or screen sharing ends, capture and upload cease immediately.
 
+### Screenshot Scheduler Reliability
+
+- **Fixed 1-Second Capture Interval**: The scheduler executes on a strict 1000 millisecond cadence.
+- **Single Scheduler Guarantee**: `startScreenshotCapture()` prevents duplicate interval loops or duplicate streams when re-rendered or invoked multiple times.
+- **Controlled Concurrency**: Only one screenshot upload runs at any given time.
+- **Slow Network & Memory Protection**: If an upload is in progress when the next screenshot frame is captured, the application maintains at most one pending screenshot. Any newer frame replaces an older pending screenshot, strictly preventing memory growth or unbounded network request queues.
+- **Sequence Tracking**: Each successfully captured screenshot receives a strictly increasing sequence number (`sequence: 1, 2, 3...`) which is preserved through network errors and reset only when a brand new assessment session starts.
+- **Clean Teardown**: Screenshot capture and uploads halt immediately when the assessment ends (`End Test`) or when the candidate stops screen sharing (`Status: Screen sharing stopped`). All timers, pending buffers, and preview URLs are cleaned up.
+
 ## Building for Production
 
 ```bash
