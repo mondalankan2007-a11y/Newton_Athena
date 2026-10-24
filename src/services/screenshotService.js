@@ -13,8 +13,129 @@
  * - Does NOT save permanent files to disk or keep historical blobs in memory.
  */
 
+import { uploadScreenshot } from './api.js';
+
 // JPEG compression quality between 0.6 and 0.7
 const JPEG_COMPRESSION_QUALITY = 0.65;
+
+// Screenshot Upload Retry Configuration (Commit 18)
+export const MAX_SCREENSHOT_RETRIES = 3;
+export const RETRY_DELAYS_MS = [1000, 2000, 4000]; // Exponential backoff: 1s, 2s, 4s
+
+/**
+ * Checks whether an error is transient and appropriate for upload retry.
+ * Permanent client errors (400, 404, 409, 413) should not be retried.
+ * Transient server errors (500, 502, 503, 504) and network failures should be retried.
+ *
+ * @param {Error} error
+ * @returns {boolean}
+ */
+export function isRetryableError(error) {
+  if (!error) return false;
+
+  // Network failures / server unreachable
+  if (error.isNetworkError || !error.status) {
+    return true;
+  }
+
+  const status = Number(error.status);
+
+  // Permanent client errors — DO NOT retry
+  if (status === 400 || status === 404 || status === 409 || status === 413) {
+    return false;
+  }
+
+  // Transient server errors — retry
+  if (status >= 500 && status <= 599) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Uploads a screenshot Blob to the backend with exponential backoff retry.
+ * Separate from basic uploadScreenshot() which performs only a single HTTP request.
+ *
+ * @param {string} sessionId - Active assessment session ID
+ * @param {Blob} screenshotBlob - JPEG Blob
+ * @param {object} [metadata] - Optional screenshot metadata (sequence, capturedAt, etc.)
+ * @param {object} [options] - Options for aborting and retry notifications
+ * @param {AbortSignal} [options.signal] - AbortSignal to cancel retry timers/requests on test end
+ * @param {Function} [options.onRetry] - Callback invoked when a retry attempt is scheduled: ({ attempt, maxRetries, delayMs, error }) => void
+ * @returns {Promise<{ success: boolean, screenshot: object }>}
+ */
+export async function uploadScreenshotWithRetry(sessionId, screenshotBlob, metadata = {}, options = {}) {
+  const { signal, onRetry } = options;
+  let lastError = null;
+
+  for (let attempt = 0; attempt <= MAX_SCREENSHOT_RETRIES; attempt++) {
+    if (signal?.aborted) {
+      const abortError = new Error('Screenshot upload cancelled.');
+      abortError.name = 'AbortError';
+      throw abortError;
+    }
+
+    try {
+      const result = await uploadScreenshot(sessionId, screenshotBlob);
+      return result;
+    } catch (err) {
+      lastError = err;
+
+      // Check if this error is retryable
+      const canRetry = isRetryableError(err);
+      if (!canRetry || attempt >= MAX_SCREENSHOT_RETRIES || signal?.aborted) {
+        throw err;
+      }
+
+      const delayMs = RETRY_DELAYS_MS[attempt] || 4000;
+      const nextAttemptNumber = attempt + 1; // 1-indexed retry number (1/3, 2/3, 3/3)
+
+      if (typeof onRetry === 'function') {
+        try {
+          onRetry({
+            attempt: nextAttemptNumber,
+            maxRetries: MAX_SCREENSHOT_RETRIES,
+            delayMs,
+            error: err,
+            metadata,
+          });
+        } catch (_) {}
+      }
+
+      // Wait with cancellation support
+      await new Promise((resolve, reject) => {
+        if (signal?.aborted) {
+          const abortError = new Error('Screenshot upload cancelled.');
+          abortError.name = 'AbortError';
+          reject(abortError);
+          return;
+        }
+
+        const timerId = setTimeout(() => {
+          if (signal) {
+            signal.removeEventListener('abort', onAbort);
+          }
+          resolve();
+        }, delayMs);
+
+        function onAbort() {
+          clearTimeout(timerId);
+          signal.removeEventListener('abort', onAbort);
+          const abortError = new Error('Screenshot upload cancelled.');
+          abortError.name = 'AbortError';
+          reject(abortError);
+        }
+
+        if (signal) {
+          signal.addEventListener('abort', onAbort, { once: true });
+        }
+      });
+    }
+  }
+
+  throw lastError || new Error(`Failed to upload screenshot after ${MAX_SCREENSHOT_RETRIES} retries.`);
+}
 
 /**
  * Captures a single screenshot from the user's active screen-sharing stream.

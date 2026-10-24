@@ -1260,6 +1260,20 @@ body {
   font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
 }
 
+.metric-box-value.retry-stat-value {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fb923c;
+  font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+}
+
+.metric-box-value.retry-count-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: #f59e0b;
+  font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+}
+
 .screenshot-error-banner {
   display: flex;
   align-items: center;
@@ -1301,6 +1315,16 @@ body {
 
 .upload-status-busy {
   color: #60a5fa;
+}
+
+.upload-status-retrying {
+  color: #fb923c;
+  animation: retryPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes retryPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
 }
 
 .upload-status-offline {

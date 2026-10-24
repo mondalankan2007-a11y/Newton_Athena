@@ -308,6 +308,17 @@ Backend stores screenshot locally
 - **Sequence Tracking**: Each successfully captured screenshot receives a strictly increasing sequence number (`sequence: 1, 2, 3...`) which is preserved through network errors and reset only when a brand new assessment session starts.
 - **Clean Teardown**: Screenshot capture and uploads halt immediately when the assessment ends (`End Test`) or when the candidate stops screen sharing (`Status: Screen sharing stopped`). All timers, pending buffers, and preview URLs are cleaned up.
 
+### Screenshot Upload Retry
+
+- **Transient Failure Recovery**: Uploads automatically retry temporary network disconnects and server errors (HTTP 500, 502, 503, 504) without dropping immediately.
+- **Retry Limits & Exponential Backoff**:
+  - Maximum retry attempts: `3` (initial attempt + up to 3 retries).
+  - Exponential backoff delays: `1s` (attempt 1), `2s` (attempt 2), `4s` (attempt 3).
+- **Non-Retryable Errors**: Permanent client errors (`400 Bad Request`, `404 Session Not Found`, `409 Conflict`, `413 Payload Too Large`) fail immediately and are not retried.
+- **Bounded Backlog & Memory Protection**: The application maintains at most one active upload and one newest pending screenshot. Old pending screenshots are replaced with newer frames to prevent building an unbounded backlog or leaking memory.
+- **Cancellation on Teardown**: Ending the assessment (`End Test`) or stopping screen sharing immediately cancels any pending retry timers or in-flight requests via `AbortController`. No screenshot uploads continue after termination.
+- **UI Transparency**: Real-time retry attempts (`Retry: X / 3`), retried counts, failed counts, and error notices are presented directly in the Screenshot Monitoring panel.
+
 ## Building for Production
 
 ```bash
