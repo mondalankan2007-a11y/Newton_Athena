@@ -280,13 +280,24 @@ During an active assessment session, the application automatically captures the 
   - Previous object URLs are revoked upon each new frame and on teardown, preventing memory leaks and avoiding permanent disk storage.
   - Backend screenshot upload and storage will be implemented in a later commit.
 
-### Screenshot Data Handling
+### Screenshot Upload Flow
 
-- **Capture Cadence**: Screenshots are captured once every second (1000 milliseconds) from the candidate's active screen-sharing stream.
-- **JPEG Conversion & Compression**: Each frame is rendered onto an off-screen canvas and converted via `canvas.toBlob()` to a compressed JPEG Blob (quality ~0.65, type `image/jpeg`).
-- **Compression Before Future Upload**: Compressing each frame to JPEG dramatically minimizes byte size (~100 KB–200 KB per frame depending on resolution), making it optimized for backend upload in future commits.
-- **In-Memory Tracking Only**: The application tracks live byte counts (`latestScreenshotSize`, `totalBytesCaptured`) and displays human-readable values (`128 KB`, `15.2 MB`) without storing an array of blobs.
-- **No Disk or Backend Storage**: Screenshots are kept strictly in transient memory for live preview; old object URLs are revoked on every tick, and no files are written to disk. Backend upload endpoints are not yet implemented in this commit.
+```
+Screen sharing
+↓
+Screenshot captured every 1 second
+↓
+JPEG compression
+↓
+POST /api/sessions/:sessionId/screenshots
+↓
+Backend stores screenshot locally
+```
+
+- **Cadence & Execution**: Every ~1 second while the assessment is active and screen sharing is active, the captured JPEG Blob is uploaded as `multipart/form-data` to `POST /api/sessions/:sessionId/screenshots`.
+- **Upload Guard**: Overlapping upload attempts are guarded against so that slow network connections do not spawn unlimited concurrent uploads.
+- **Resilience to Failure**: Upload failures (network disconnection, server reboot, temporary HTTP errors) currently do not stop or invalidate the active assessment. The frontend records the failed upload count, flags the upload status (e.g. `Upload Status: Backend unavailable`), and continues capturing and attempting subsequent uploads without crashing.
+- **Teardown**: When the assessment ends or screen sharing ends, capture and upload cease immediately.
 
 ## Building for Production
 

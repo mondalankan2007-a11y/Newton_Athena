@@ -1243,6 +1243,50 @@ body {
   font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
 }
 
+.metric-box-value.uploaded-count-value {
+  font-size: 15px;
+  font-weight: 700;
+  color: #10b981;
+  font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.failed-count-tag {
+  font-size: 11px;
+  font-weight: 500;
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.15);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.metric-box-value.upload-status-value {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.upload-status-ok {
+  color: #34d399;
+}
+
+.upload-status-busy {
+  color: #60a5fa;
+}
+
+.upload-status-offline {
+  color: #fbbf24;
+}
+
+.upload-status-err {
+  color: #f87171;
+}
+
+.metric-box-value.status-capture-value {
+  color: #10b981;
+}
+
 .metric-box-value.time-value {
   font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
   font-size: 13px;

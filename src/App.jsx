@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { createSession, endSession, getSession, getBackendHealth } from './services/api';
+import { createSession, endSession, getSession, getBackendHealth, uploadScreenshot } from './services/api';
 import { startScreenshotCapture, stopScreenshotCapture } from './services/screenshotScheduler';
 import { formatFileSize } from './services/screenshotService';
 import './App.css';
@@ -549,7 +549,15 @@ export default function App() {
   const [totalBytesCaptured, setTotalBytesCaptured] = useState(0); // running total bytes
   const [screenshotStatus, setScreenshotStatus] = useState('Inactive'); // 'Inactive' | 'Active' | 'Screenshot capture failed'
 
+  // ── Screenshot Upload States (Commit 16) ──────────────────────────────────
+  const [screenshotUploadStatus, setScreenshotUploadStatus] = useState('idle'); // 'idle' | 'uploading' | 'uploaded' | 'error' | 'Backend unavailable'
+  const [uploadedScreenshotCount, setUploadedScreenshotCount] = useState(0);
+  const [failedScreenshotCount, setFailedScreenshotCount] = useState(0);
+  const [lastUploadTime, setLastUploadTime] = useState('');
+  const [lastUploadedScreenshotSize, setLastUploadedScreenshotSize] = useState(0);
+
   const latestScreenshotUrlRef = useRef(null);
+  const isUploadingRef = useRef(false);
 
   /** Safely revokes and resets the latest screenshot object URL */
   function clearScreenshotPreview() {
@@ -582,6 +590,8 @@ export default function App() {
     stopScreenshotCapture();
     clearScreenshotPreview();
     setScreenshotStatus('Inactive');
+    setScreenshotUploadStatus('idle');
+    isUploadingRef.current = false;
     setLatestScreenshotSize(0);
     setTotalBytesCaptured(0);
     setCameraStream(null);
@@ -676,6 +686,12 @@ export default function App() {
       setLatestScreenshotSize(0);
       setTotalBytesCaptured(0);
       setScreenshotStatus('Active');
+      setUploadedScreenshotCount(0);
+      setFailedScreenshotCount(0);
+      setScreenshotUploadStatus('idle');
+      setLastUploadTime('');
+      setLastUploadedScreenshotSize(0);
+      isUploadingRef.current = false;
       clearScreenshotPreview();
       setFlow('in-progress');
 
@@ -875,7 +891,7 @@ export default function App() {
     };
   }, [flow, session?.sessionId]);
 
-  // ── Automatic 1-Second Screenshot Capture Loop (Commit 13 & 14) ───────────
+  // ── Automatic 1-Second Screenshot Capture & Upload Loop (Commit 13, 14, 16) ───
   useEffect(() => {
     const isAssessmentActive = flow === 'in-progress' && session?.status === 'active';
     const isScreenLive = screenStream && screenStream.getVideoTracks().some((t) => t.readyState === 'live');
@@ -885,7 +901,8 @@ export default function App() {
 
       startScreenshotCapture(
         screenStream,
-        (blob) => {
+        async (blob) => {
+          // 1. Local capture metrics update
           setScreenshotCount((prev) => prev + 1);
           setLastScreenshotTime(new Date().toLocaleTimeString());
           if (blob && typeof blob.size === 'number') {
@@ -894,13 +911,48 @@ export default function App() {
           }
           setScreenshotStatus('Active');
 
+          // 2. Manage single preview object URL (Memory management: revoke previous)
           const newUrl = URL.createObjectURL(blob);
-          // Revoke the previous object URL before replacing it
           if (latestScreenshotUrlRef.current) {
             URL.revokeObjectURL(latestScreenshotUrlRef.current);
           }
           latestScreenshotUrlRef.current = newUrl;
           setLatestScreenshotUrl(newUrl);
+
+          // 3. Validate active session before uploading
+          const currentSessionId = session?.sessionId;
+          if (!currentSessionId) {
+            setScreenshotUploadStatus('idle');
+            return;
+          }
+
+          // 4. Overlapping upload guard: skip if previous upload still in progress
+          if (isUploadingRef.current) {
+            return;
+          }
+
+          // 5. Upload screenshot Blob to backend
+          isUploadingRef.current = true;
+          setScreenshotUploadStatus('uploading');
+
+          try {
+            await uploadScreenshot(currentSessionId, blob);
+            setUploadedScreenshotCount((prev) => prev + 1);
+            setScreenshotUploadStatus('uploaded');
+            setLastUploadTime(new Date().toLocaleTimeString());
+            setLastUploadedScreenshotSize(blob.size);
+          } catch (uploadErr) {
+            console.warn('Screenshot upload failed:', uploadErr?.message);
+            setFailedScreenshotCount((prev) => prev + 1);
+            if (uploadErr.isNetworkError || !uploadErr.status) {
+              setScreenshotUploadStatus('Backend unavailable');
+            } else {
+              setScreenshotUploadStatus('error');
+            }
+            // Do NOT stop capture scheduler; subsequent captures proceed
+          } finally {
+            isUploadingRef.current = false;
+          }
         },
         (err) => {
           console.warn('Screenshot capture failed:', err?.message);
@@ -912,6 +964,8 @@ export default function App() {
       if (!isAssessmentActive) {
         clearScreenshotPreview();
         setScreenshotStatus('Inactive');
+        setScreenshotUploadStatus('idle');
+        isUploadingRef.current = false;
         setLatestScreenshotSize(0);
         setTotalBytesCaptured(0);
       } else if (!isScreenLive) {
@@ -922,7 +976,7 @@ export default function App() {
     return () => {
       stopScreenshotCapture();
     };
-  }, [flow, session?.status, screenStream]);
+  }, [flow, session?.status, session?.sessionId, screenStream]);
 
   // Determine current active progress step (Requirement 10)
   function getActiveStep() {
@@ -1275,6 +1329,12 @@ export default function App() {
               {/* Monitoring metrics */}
               <div className="screenshot-metrics-grid">
                 <div className="screenshot-metric-box">
+                  <span className="metric-box-label">Capture</span>
+                  <span className="metric-box-value status-capture-value" id="screenshot-capture-active">
+                    {screenshotStatus}
+                  </span>
+                </div>
+                <div className="screenshot-metric-box">
                   <span className="metric-box-label">Capture Rate</span>
                   <span className="metric-box-value" id="screenshot-capture-rate">
                     1 screenshot / second
@@ -1287,9 +1347,47 @@ export default function App() {
                   </span>
                 </div>
                 <div className="screenshot-metric-box">
-                  <span className="metric-box-label">Last Screenshot</span>
-                  <span className="metric-box-value time-value" id="screenshot-last-time">
-                    {lastScreenshotTime || '--:--:--'}
+                  <span className="metric-box-label">Screenshots Uploaded</span>
+                  <span className="metric-box-value uploaded-count-value" id="screenshot-uploaded-count">
+                    {uploadedScreenshotCount}
+                    {failedScreenshotCount > 0 && (
+                      <span className="failed-count-tag" title="Failed upload attempts">
+                        ({failedScreenshotCount} failed)
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div className="screenshot-metric-box">
+                  <span className="metric-box-label">Upload Status</span>
+                  <span
+                    className={`metric-box-value upload-status-value ${
+                      screenshotUploadStatus === 'uploaded'
+                        ? 'upload-status-ok'
+                        : screenshotUploadStatus === 'uploading'
+                        ? 'upload-status-busy'
+                        : screenshotUploadStatus === 'Backend unavailable'
+                        ? 'upload-status-offline'
+                        : screenshotUploadStatus === 'error'
+                        ? 'upload-status-err'
+                        : ''
+                    }`}
+                    id="screenshot-upload-status"
+                  >
+                    {screenshotUploadStatus === 'uploaded'
+                      ? 'Uploaded'
+                      : screenshotUploadStatus === 'uploading'
+                      ? 'Uploading...'
+                      : screenshotUploadStatus === 'Backend unavailable'
+                      ? 'Backend unavailable'
+                      : screenshotUploadStatus === 'error'
+                      ? 'Upload Failed'
+                      : 'Idle'}
+                  </span>
+                </div>
+                <div className="screenshot-metric-box">
+                  <span className="metric-box-label">Last Upload</span>
+                  <span className="metric-box-value time-value" id="screenshot-last-upload-time">
+                    {lastUploadTime || '--:--:--'}
                   </span>
                 </div>
                 <div className="screenshot-metric-box">

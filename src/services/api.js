@@ -2,7 +2,8 @@
  * API client utility for communicating with the Newton Athena backend server.
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_BASE_URL =
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) || 'http://localhost:3001';
 
 /**
  * Checks the health status of the backend server.
@@ -137,6 +138,54 @@ export async function getSession(sessionId) {
 }
 
 /**
+ * Uploads a JPEG screenshot Blob to the backend for an active session.
+ * @param {string} sessionId
+ * @param {Blob} screenshotBlob
+ * @returns {Promise<{ success: boolean, screenshot: object }>}
+ */
+export async function uploadScreenshot(sessionId, screenshotBlob) {
+  if (!sessionId || typeof sessionId !== 'string' || !sessionId.trim()) {
+    throw new Error('A valid sessionId is required to upload a screenshot.');
+  }
+
+  if (!screenshotBlob || !(screenshotBlob instanceof Blob)) {
+    throw new Error('A valid screenshot Blob is required for upload.');
+  }
+
+  const formData = new FormData();
+  formData.append('screenshot', screenshotBlob, 'screenshot.jpg');
+
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/sessions/${encodeURIComponent(sessionId.trim())}/screenshots`,
+      {
+        method: 'POST',
+        body: formData,
+        // Browser / fetch automatically sets Content-Type with multipart boundary
+      }
+    );
+
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      const errorMessage = data?.error || getHttpErrorMessage(response.status);
+      const error = new Error(errorMessage);
+      error.status = response.status;
+      throw error;
+    }
+
+    return data;
+  } catch (err) {
+    if (err.status) {
+      throw err;
+    }
+    const networkError = new Error('Unable to connect to the assessment server.');
+    networkError.isNetworkError = true;
+    throw networkError;
+  }
+}
+
+/**
  * Returns a user-friendly error message for standard HTTP statuses.
  * @param {number} status
  * @returns {string}
@@ -149,6 +198,8 @@ function getHttpErrorMessage(status) {
       return 'Session was not found on the assessment server.';
     case 409:
       return 'A session with this ID is already active.';
+    case 413:
+      return 'Screenshot file size exceeds the 2 MB limit.';
     case 500:
       return 'The assessment server encountered an internal error. Please try again.';
     default:
@@ -157,3 +208,4 @@ function getHttpErrorMessage(status) {
 }
 
 export { API_BASE_URL };
+
