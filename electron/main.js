@@ -2,7 +2,7 @@ const { app, BrowserWindow, session, desktopCapturer, systemPreferences, shell, 
 const path = require('path');
 
 // Detect if running in development (Vite dev server) or production (built files)
-const isDev = process.env.NODE_ENV !== 'production';
+const isDev = !app.isPackaged && process.env.NODE_ENV !== 'production';
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -10,7 +10,7 @@ function createWindow() {
     height: 800,
     minWidth: 800,
     minHeight: 600,
-    title: 'Heimdall is monitoring your test',
+    title: 'Newton Athena — Technical Assessment',
     backgroundColor: '#0f1117',
     webPreferences: {
       // Security: context isolation ON, Node integration OFF
